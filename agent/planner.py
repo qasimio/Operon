@@ -11,11 +11,10 @@ Repository summary:
 {repo_summary}
 
 Return a numbered step-by-step plan.
-No explanation.
+No explanations.
 """
-
     output = call_llm(prompt)
-    steps = [line.strip() for line in output.splitlines() if line.strip()] # give string list of all the steps (cleaned)
+    steps = [line.strip() for line in output.splitlines() if line.strip()]
     return steps
 
 
