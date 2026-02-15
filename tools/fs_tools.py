@@ -1,25 +1,40 @@
+# tools/fs_tools.py
 from pathlib import Path
 from typing import Dict
 
 def read_file(path: str, repo_root: str) -> Dict:
     full_path = Path(repo_root) / path
     try:
-        text = full_path.read_text()
+        text = full_path.read_text(encoding="utf-8", errors="ignore")
         return {"success": True, "path": path, "content": text, "length": len(text)}
     except Exception as e:
         return {"success": False, "path": path, "error": str(e)}
 
-def write_file(path: str, content: str, repo_root: str, overwrite: bool = True) -> Dict:
+def write_file(path: str, content: str, repo_root: str, mode: str = "append") -> Dict:
+    """
+    Write to a file inside repo_root.
+
+    mode:
+      - "append" (default): append content (creates file if missing)
+      - "overwrite": replace file contents entirely
+    """
     full_path = Path(repo_root) / path
     try:
         full_path.parent.mkdir(parents=True, exist_ok=True)
-        if full_path.exists() and not overwrite:
-            return {"success": False, "path": path, "error": "file exists and overwrite=False"}
-        full_path.write_text(content)
-        return {"success": True, "path": path, "written_bytes": len(content)}
+
+        if mode not in ("append", "overwrite"):
+            return {"success": False, "path": path, "error": f"invalid mode: {mode}"}
+
+        if mode == "append":
+            # open in append mode (creates file if not exists)
+            with full_path.open("a", encoding="utf-8") as f:
+                f.write(content)
+        else:  # overwrite
+            full_path.write_text(content, encoding="utf-8")
+
+        return {"success": True, "path": path, "mode": mode, "written_bytes": len(content)}
     except Exception as e:
         return {"success": False, "path": path, "error": str(e)}
-
 
 
 """
