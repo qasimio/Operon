@@ -12,3 +12,8 @@ class AgentState:
     files_modified: List[str] = field(default_factory=list)
 
     last_action: Optional[str] = None
+    observations: List[Dict[str, Any]] = field(default_factory=list)
+    errors: List[str] = field(default_factory=list)
+    
+    step_count:int = 0
+    done: bool = False
