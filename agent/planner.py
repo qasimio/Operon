@@ -6,20 +6,23 @@ def make_plan(goal: str, repo_root: str):
     repo_summary = build_repo_summary(repo_root)
 
     prompt = f"""
-### INSTRUCTIONS
-You are a disciplined software agent.
-Respond ONLY with steps.
-No conversation.
+### SYSTEM
+You are an execution-only coding agent.
+
+Return ONLY numbered steps.
+No chat.
 No explanation.
-GOAL:
+No greeting.
+
+### GOAL
 {goal}
 
-FILES IN REPOSITORY:
+### FILES
 {repo_summary}
 
-Return a SHORT numbered plan.
-No explanations.
+### OUTPUT
 """
+
 
     output = call_llm(prompt)
 
