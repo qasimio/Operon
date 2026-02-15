@@ -1,33 +1,26 @@
-import subprocess
+import requests
+
+URL = "http://127.0.0.1:8080/completion"
 
 def call_llm(prompt: str) -> str:
     try:
-        result = subprocess.run(
-            [
-                "./llama-cli",
-                "-m", "models/codellama-7b-instruct.Q4_K_M.gguf",
-                "-p", prompt,
-                "--n-predict", "512"
-            ],
-            capture_output=True,
-            text=True,
-            check=False   # don't auto-crash; we handle it ourselves
+        response = requests.post(
+            URL,
+            json={
+                "prompt": prompt,
+                "n_predict": 256,
+                "temperature": 0.2,
+                "stop": ["</s>"]
+            },
+            timeout=120
         )
 
-        if result.returncode != 0:
-            return f"ERROR: LLM process failed\n{result.stderr.strip()}"
+        data = response.json()
 
-        if not result.stdout.strip():
-            return "ERROR: LLM returned empty output"
-
-        return result.stdout
-
-    except FileNotFoundError:
-        return "ERROR: llama-cli not found or not executable"
+        return data["content"].strip()
 
     except Exception as e:
         return f"ERROR: {str(e)}"
-
 
 
 

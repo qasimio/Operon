@@ -17,6 +17,9 @@ def _valid_path(action):
 
 
 def run_agent(state):
+    if not state.plan:
+        state.plan = make_plan(state.goal, state.repo_root)
+
 
     # ensure plan exists
     if not getattr(state, "plan", None):
@@ -34,6 +37,7 @@ def run_agent(state):
         state.step_count += 1
 
         act = action.get("action")
+        print("\nPLAN:", state.plan, "\n")
 
         # ---------------- READ FILE ----------------
         if act == "read_file":

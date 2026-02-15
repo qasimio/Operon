@@ -1,61 +1,60 @@
-# agent/planner.py
 from agent.llm import call_llm
-import os
-from pathlib import Path
-from typing import List
+from agent.repo import build_repo_summary
 
-def build_repo_summary(repo_root: str, max_files: int = 20, max_bytes: int = 2000) -> str:
-    """
-    Make a short repo summary: top-level file list and small previews of a few files
-    to keep context size reasonable for 7B models.
-    """
-    p = Path(repo_root)
-    entries = []
-    count = 0
-    for root, dirs, files in os.walk(repo_root):
-        # skip hidden and .git
-        if ".git" in root.split(os.sep):
-            continue
-        for f in files:
-            if count >= max_files:
-                break
-            fp = Path(root) / f
-            try:
-                preview = fp.read_text(encoding="utf-8", errors="ignore")[:max_bytes]
-            except Exception:
-                preview = "<unreadable>"
-            rel = str(fp.relative_to(p))
-            entries.append(f"FILE: {rel}\nPREVIEW:\n{preview}\n---")
-            count += 1
-        if count >= max_files:
-            break
-    return "\n".join(entries)
+def make_plan(goal: str, repo_root: str):
 
-def make_plan(goal: str, repo_root: str) -> List[str]:
     repo_summary = build_repo_summary(repo_root)
-    prompt = f"""
-You are a pragmatic junior software engineer with strict discipline. 
 
-Goal:
+    prompt = f"""
+You are an execution-only coding agent.
+
+Your job: produce a SHORT actionable plan.
+
+STRICT RULES:
+- return between 3 and 6 steps ONLY
+- each step must contain REAL TEXT
+- do NOT return empty numbering
+- do NOT explain anything
+- do NOT chat
+- output ONE step per line
+
+GOAL:
 {goal}
 
-Short repository summary (few files with short previews):
+FILES:
 {repo_summary}
 
-Return a short, numbered, step-by-step plan to accomplish the Goal.
-Do not include any extra commentary.
+PLAN:
 """
-    output = call_llm(prompt)
-    # return cleaned lines, drop empty
-    lines = [l.strip() for l in output.splitlines() if l.strip()]
-    # collapse lines starting with numbers into step strings
-    steps = []
-    for line in lines:
-        # optionally strip leading numbering
-        line = line.lstrip("0123456789. )\t")
-        steps.append(line)
-    return steps
 
+    output = call_llm(prompt)
+
+    steps = []
+
+    for line in output.splitlines():
+        line = line.strip()
+
+        if not line:
+            continue
+
+        # remove leading numbers like "1." or "2)"
+        while len(line) > 0 and (line[0].isdigit() or line[0] in ". )-"):
+            line = line[1:].strip()
+
+        if len(line) > 3:  # ignore garbage like "1."
+            steps.append(line)
+
+    # 🚑 fallback if model still dumb
+    if len(steps) == 0:
+        steps = [
+            "Locate target file",
+            "Read the file",
+            "Modify content according to goal",
+            "Write updated file",
+            "Finish"
+        ]
+
+    return steps[:6]
 
 
 

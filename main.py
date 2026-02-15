@@ -3,7 +3,7 @@ from agent.loop import run_agent
 
 if __name__ == "__main__":
     state = AgentState(
-        goal= "Refactor test.txt",
+        goal= "add print(""Hellow MQ"") description in readme.md",
         repo_root="/home/UserX/Master/LSEEA"
     )
 

@@ -12,28 +12,36 @@ ACTION_SCHEMA_EXAMPLE = {
 # Minimal allowed actions and examples are explicitly listed to reduce hallucination.
 def decide_next_action(state) -> Dict:
     prompt = f"""
-You control a local execution agent. Reply with JSON only.
+You are a deterministic execution agent.
 
-Current goal:
+NEVER chat.
+NEVER explain.
+ONLY output valid JSON.
+
+Choose ONE action.
+
+Valid actions:
+read_file(path)
+write_file(path, content)
+run_tests()
+git_commit(message)
+stop()
+
+Goal:
 {state.goal}
 
 Plan:
 {state.plan}
 
-Files read so far: {state.files_read}
-Files modified so far: {state.files_modified}
-Last action: {state.last_action}
+Files read:
+{state.files_read}
 
-Available actions (choose exactly one and return JSON):
-1) read_file -> {{ "action": "read_file", "path": "<relative_path>" }}
-2) write_file -> {{ "action": "write_file", "path": "<relative_path>", "content": "<new file content>" }}
-3) run_tests -> {{ "action": "run_tests" }}
-4) git_commit -> {{ "action": "git_commit", "message": "<commit message>", "branch_prefix": "agent/refactor" }}
-5) stop -> {{ "action": "stop" }}
+Files modified:
+{state.files_modified}
 
-Return JSON only. Example:
-{json.dumps(ACTION_SCHEMA_EXAMPLE)}
+Return JSON ONLY.
 """
+
     output = call_llm(prompt)
 
     # Try to parse JSON strictly
