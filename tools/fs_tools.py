@@ -1,6 +1,6 @@
 from pathlib import Path
 
-def read_files(path: str, repo_root: str) -> dict:
+def read_file(path: str, repo_root: str) -> dict:
     full_path = Path(repo_root) / path          # its not divide but append/join further path 
     try:
         content = full_path.read_text()
