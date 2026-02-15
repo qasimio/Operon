@@ -1,29 +1,34 @@
 import subprocess
 
+LLAMA_PATH = "/home/UserX/llama.cpp/build/bin/llama-cli"
+MODEL_PATH = "/home/UserX/llama.cpp/models/codellama-7b-instruct.Q4_K_M.gguf"
+
 def call_llm(prompt: str) -> str:
     try:
         result = subprocess.run(
             [
-                "./llama-cli",
-                "-m", "models/codellama-7b-instruct.Q4_K_M.gguf",
-                "-p", prompt,
-                "--n-predict", "512"
+                LLAMA_PATH,
+                "-m", MODEL_PATH,
+                "--simple-io",          # ⭐ THIS FIXES EVERYTHING
+                "-c", "2048",
+                "--n-predict", "512",
+                "--temp", "0.2"
             ],
+            input=prompt,
             capture_output=True,
             text=True,
-            check=False   # don't auto-crash; we handle it ourselves
+            timeout=120   # prevents infinite hang
         )
 
-        if result.returncode != 0:
-            return f"ERROR: LLM process failed\n{result.stderr.strip()}"
+        output = result.stdout.strip().replace("\x00", "")
 
-        if not result.stdout.strip():
-            return "ERROR: LLM returned empty output"
+        if not output:
+            return "ERROR: empty LLM output"
 
-        return result.stdout
+        return output
 
-    except FileNotFoundError:
-        return "ERROR: llama-cli not found or not executable"
+    except subprocess.TimeoutExpired:
+        return "ERROR: LLM timeout"
 
     except Exception as e:
         return f"ERROR: {str(e)}"
