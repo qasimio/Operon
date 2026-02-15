@@ -1,51 +1,54 @@
+# agent/decide.py
 from agent.llm import call_llm
 import json
 import re
+from typing import Dict
 
-def decide_next_action(state) -> dict:
+ACTION_SCHEMA_EXAMPLE = {
+    "action": "read_file",
+    "path": "src/utils.py"
+}
+
+# Minimal allowed actions and examples are explicitly listed to reduce hallucination.
+def decide_next_action(state) -> Dict:
     prompt = f"""
-You are controlling an execution agent.
+You control a local execution agent. Reply with JSON only.
 
-Goal: {state.goal}
-Plan: {state.plan}
-Files read: {state.files_read}
-Files modified: {state.files_modified}
+Current goal:
+{state.goal}
+
+Plan:
+{state.plan}
+
+Files read so far: {state.files_read}
+Files modified so far: {state.files_modified}
 Last action: {state.last_action}
 
-Decide the next action.
+Available actions (choose exactly one and return JSON):
+1) read_file -> {{ "action": "read_file", "path": "<relative_path>" }}
+2) write_file -> {{ "action": "write_file", "path": "<relative_path>", "content": "<new file content>" }}
+3) run_tests -> {{ "action": "run_tests" }}
+4) git_commit -> {{ "action": "git_commit", "message": "<commit message>", "branch_prefix": "agent/refactor" }}
+5) stop -> {{ "action": "stop" }}
 
-Available actions:
-- read_file(path)
-- write_file(path, content)
-- run_tests()
-- git_commit(message)
-- stop()
-
-Return JSON only.
+Return JSON only. Example:
+{json.dumps(ACTION_SCHEMA_EXAMPLE)}
 """
-
     output = call_llm(prompt)
 
-    # Try direct parse first
+    # Try to parse JSON strictly
     try:
         return json.loads(output)
     except json.JSONDecodeError:
-        pass
-
-    # If model added extra text, try to extract JSON block
-    match = re.search(r'\{.*\}', output, re.DOTALL)
-    if match:
-        try:
-            return json.loads(match.group(0))
-        except json.JSONDecodeError:
-            pass
-
-    # Final safe fallback
-    return {
-        "action": "stop",
-        "error": "Failed to parse LLM JSON output",
-        "raw_output": output
-    }
+        # extract first {...} block
+        m = re.search(r"\{.*\}", output, re.DOTALL)
+        if m:
+            try:
+                return json.loads(m.group(0))
+            except json.JSONDecodeError:
+                pass
+    # fallback
+    return {"action": "stop", "error": "failed_to_parse", "raw": output}
 
 
 
