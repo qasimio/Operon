@@ -3,7 +3,9 @@ from agent.loop import run_agent
 
 if __name__ == "__main__":
     state = AgentState(
-        goal='append "# this comment is added by L-SEEA from MQ" to tools/build_brain.py',
+        goal='append "from tools.repo_brain import build_repo_brain' + 
+'from agent.llm import call_llm' + 
+'build_repo_brain("/home/UserX/Master/LSEEA/", call_llm)" to logs/test.py',
 
         repo_root="/home/UserX/Master/LSEEA"
     )
