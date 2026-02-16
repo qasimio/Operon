@@ -119,10 +119,17 @@ def run_agent(state):
             if obs.get("success"):
                 if path not in state.files_modified:
                     state.files_modified.append(path)
-                # stop after successful write (you can change to continue flow later)
+
+                # AUTO COMMIT (deterministic, not LLM controlled)
+                try:
+                    from tools.git_tools import smart_commit_pipeline
+                    smart_commit_pipeline(state.goal, state.repo_root)
+                    print("DEBUG: auto-commit executed")
+                except Exception as e:
+                    print("DEBUG: commit skipped:", e)
+
                 state.done = True
-            else:
-                state.errors.append(obs.get("error"))
+
 
         # ================= RUN TESTS =================
         elif act == "run_tests":
