@@ -12,6 +12,7 @@
   "logs",
   "main.py",
   "readme.md",
+  "repo_files.json",
   "repo_tree.json",
   "runtime",
   "runtime/state.py",
@@ -20,5 +21,6 @@
   "tools/fs_tools.py",
   "tools/git_tools.py",
   "tools/repo_brain.py",
+  "tools/repo_search.py",
   "tools/shell_tools.py"
 ]

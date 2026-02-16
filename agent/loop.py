@@ -1,4 +1,6 @@
 # agent/loop.py (overwrite)
+from runtime import state
+from tools.repo_search import search_repo
 from agent.goal_parser import extract_target_files, parse_write_instruction
 from agent.approval import ask_user_approval
 from agent.decide import decide_next_action
@@ -37,9 +39,23 @@ def run_agent(state):
 
             # If nothing has been read yet, force a read of the primary target file
             if not state.files_read:
+
+                # 1️⃣ First try explicit file in goal
                 targets = extract_target_files(state.repo_root, state.goal)
+
+                # 2️⃣ If none found → use repo search intelligence
+                if not targets:
+                    try:
+                        targets = search_repo(state.repo_root, state.goal)
+                        if targets:
+                            print("SEARCH HIT:", targets[0])
+                    except:
+                        targets = []
+
+                # 3️⃣ read first candidate if any
                 if targets:
                     action = {"action": "read_file", "path": targets[0]}
+
 
             # If parsed concrete write exists and file not yet modified, prefer it
             if action is None:
