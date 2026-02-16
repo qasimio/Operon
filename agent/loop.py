@@ -6,7 +6,6 @@ from agent.decide import decide_next_action
 from agent.planner import make_plan
 
 from tools.fs_tools import read_file, write_file
-from tools.git_tools import commit_to_new_branch
 from tools.shell_tools import run_tests
 
 import time
@@ -98,6 +97,8 @@ def run_agent(state):
                 obs = {"success": False, "error": str(e), "path": path}
 
             state.observations.append(obs)
+
+
             if obs.get("success"):
                 if path not in state.files_modified:
                     state.files_modified.append(path)
@@ -122,38 +123,6 @@ def run_agent(state):
                 state.errors.append(
                     f"tests_failed: {obs.get('returncode', obs.get('error'))}"
                 )
-
-        # ================= GIT COMMIT =================
-        elif act == "git_commit":
-            # If no files were modified, ask user whether to continue with empty commit
-            if not state.files_modified:
-                ok = ask_user_approval("git_commit", {"note": "No files modified. Proceed with commit?"})
-                if not ok:
-                    state.errors.append("User denied git_commit due to no modified files")
-                    # don't mark done; let agent decide next (or we stop to avoid loop)
-                    state.done = True
-                    continue
-
-            # approval for commit (even if files modified)
-            if not ask_user_approval("git_commit", action):
-                state.errors.append("User denied git_commit")
-                state.done = True
-                continue
-
-            prefix = action.get("branch_prefix", "agent/refactor")
-            message = action.get("message", "agent automated commit")
-
-            try:
-                obs = commit_to_new_branch(prefix, message, state.repo_root)
-            except Exception as e:
-                obs = {"success": False, "error": str(e)}
-
-            state.observations.append(obs)
-
-            if obs.get("success"):
-                state.done = True  # stop after successful commit
-            else:
-                state.errors.append(obs.get("error", str(obs)))
 
         # ================= STOP =================
         elif act == "stop":
