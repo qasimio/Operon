@@ -28,7 +28,16 @@ def write_file(path: str, content: str, repo_root: str, mode: str = "append") ->
         if mode == "append":
             # open in append mode (creates file if not exists)
             with full_path.open("a", encoding="utf-8") as f:
-                f.write(content)
+                # ensure newline before append
+                if full_path.exists():
+                    with full_path.open("rb") as check:
+                        check.seek(0, 2)
+                        if check.tell() > 0:
+                            f.write("\n")
+
+                f.write(content.rstrip() + "\n")
+
+
         else:  # overwrite
             full_path.write_text(content, encoding="utf-8")
 
