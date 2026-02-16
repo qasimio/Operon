@@ -3,7 +3,7 @@ from agent.loop import run_agent
 
 if __name__ == "__main__":
     state = AgentState(
-        goal="""Append the following code EXACTLY as written (keep structure unchanged) 
+        goal="""Overwrite the following code EXACTLY as written (keep structure unchanged) 
 to the end of file logs/test.py:
 
 from tools.repo_brain import build_repo_brain
