@@ -36,21 +36,33 @@ def extract_target_files(repo_root: str, goal: str):
     return seen
 
 def parse_write_instruction(goal: str, repo_root: str | None = None):
-    """
-    Parse goals like:
-      append "TEXT" to readme.md
-      add 'TEXT' in docs/notes.md
-      write TEXT into README.md
 
-    Returns a dict action or None.
-    """
+    import re
+    from pathlib import Path
+
     g = goal.strip()
 
+    # detect mode first
+    lower = g.lower()
+
+    if "overwrite" in lower or "replace" in lower:
+        mode = "overwrite"
+    else:
+        mode = "append"
+
     # prefer quoted content
-    m = re.search(r'(?:append|add|write|insert)\s+[\'"](.+?)[\'"]\s+(?:to|in|into)\s+([\w\-/\.]+)', g, flags=re.IGNORECASE)
+    m = re.search(
+        r'(?:append|add|write|insert|overwrite|replace)\s+[\'"](.+?)[\'"]\s+(?:to|in|into)\s+([\w\-/\.]+)',
+        g,
+        flags=re.IGNORECASE
+    )
+
     if not m:
-        # fallback: take quoted-less form (less reliable)
-        m = re.search(r'(?:append|add|write|insert)\s+(.+?)\s+(?:to|in|into)\s+([\w\-/\.]+)', g, flags=re.IGNORECASE)
+        m = re.search(
+            r'(?:append|add|write|insert|overwrite|replace)\s+(.+?)\s+(?:to|in|into)\s+([\w\-/\.]+)',
+            g,
+            flags=re.IGNORECASE
+        )
 
     if not m:
         return None
@@ -58,20 +70,16 @@ def parse_write_instruction(goal: str, repo_root: str | None = None):
     content = m.group(1).strip()
     path = m.group(2).strip()
 
-    # verify path is acceptable
+    # sanity check path
     if repo_root:
         repo = Path(repo_root)
         p = repo / Path(path)
-        # allow if exists OR looks like known extension
-        if not p.exists() and not _looks_like_file(path):
-            return None
-    else:
-        if not _looks_like_file(path):
+        if not p.exists() and "." not in path:
             return None
 
     return {
         "action": "write_file",
         "path": Path(path).as_posix(),
         "content": content,
-        "mode": "append"
+        "mode": mode
     }

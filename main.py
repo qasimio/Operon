@@ -3,7 +3,8 @@ from agent.loop import run_agent
 
 if __name__ == "__main__":
     state = AgentState(
-        goal="overwrite ""hello qwen2.5"" to readme.md",
+        goal='overwrite "hello qwen2.5, we did it! the junior is active ;)" to readme.md',
+
         repo_root="/home/UserX/Master/LSEEA"
     )
 
