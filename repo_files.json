@@ -1,0 +1,183 @@
+{
+  "main.py": {
+    "summary": "```\n\n`",
+    "functions": [],
+    "classes": [],
+    "imports": [
+      "AgentState",
+      "run_agent"
+    ]
+  },
+  "readme.md": {
+    "summary": "this project involves creating a new version of an existing application called \"app1\". \nthe goal is to improve its performance by optimizing code and enhancing user experience. \nwe have completed 80% of the tasks assigned to us.\nthere are still some bugs that need fixing, but we are confident in our ability to resolve them soon.\n\n```\n```",
+    "functions": [],
+    "classes": [],
+    "imports": []
+  },
+  "tools/fs_tools.py": {
+    "summary": "def try_read_file(path: str, repo_root: str):\n    result = read_file(path, repo_root)\n    if not result[\"success\"]:\n        raise Exception(result[\"error\"])\n    else:\n        return result\n\n\n# Example usage\nif __name__ == \"__main__\":\n    # Read a file from the repository root\n    print(try_read_file(\"example.txt\", \"/path/to/repo\"))\n```\n\n:",
+    "functions": [
+      "read_file",
+      "write_file"
+    ],
+    "classes": [],
+    "imports": [
+      "Path",
+      "Dict"
+    ]
+  },
+  "tools/shell_tools.py": {
+    "summary": "def list_files(repo_root: str) -> Dict:\n    \"\"\"\n    List all files in the repository root.\n    \"\"\"\n    try:\n        result = subprocess.run(\n            [\"ls\", \"-la\"],\n            cwd=repo_root,\n            capture_output=True,\n            text=True\n        )\n        return {\n            \"success\": result.returncode == 0,\n            \"stdout\": result.stdout,\n            \"stderr\": result.stderr,\n            \"returncode\": result.returncode\n        }\n    except Exception as e:\n        return {\"success\": False, \"error\": str(e)}\n\ndef get_repo_info(repo_root: str) -> Dict:\n    \"\"\"\n    Get repository information using git.\n    \"\"\"\n    try:\n        result = subprocess.run(\n            [\"git\", \"status\"],\n            cwd=repo_root,\n            capture_output=True,\n            text=True\n        )\n        return {\n            \"success\": result.returncode == 0,\n            \"stdout\": result.stdout,\n            \"stderr\": result.stderr,\n            \"returncode\": result.returncode\n        }\n    except Exception as e:\n        return {\"success\": False, \"error\": str(e)}\n```\n\nThis file contains a Python module named `shell_tools.py` that provides functions for running tests, listing files in a repository root",
+    "functions": [
+      "run_tests"
+    ],
+    "classes": [],
+    "imports": [
+      "subprocess",
+      "Dict"
+    ]
+  },
+  "tools/git_tools.py": {
+    "summary": "def run_git(cmd, cwd):\n    return _run(cmd, cwd)\n\ndef create_branch(branch_name, repo_root):\n    _run([\"git\", \"checkout\", \"-b\", branch_name], repo_root)\n\ndef commit(message, repo_root):\n    _run([\"git\", \"commit\", \"-m\", message])\n\n\n\"\"\"\n\n\"\"\"\n# TODO: Add tests for these functions\n```\n\nThis file contains a set of utility functions to interact with Git repositories using Python's `subprocess` module. The main functionalities include running arbitrary Git commands (`run_git`), creating new branches (`create_branch`), and committing changes with messages (`commit`). Additionally, there is a more complex pipeline function called `smart_commit_pipeline`, which handles the creation of feature branches if on the main/master branch, stages all changes, commits them with a truncated message, and pushes the commit to the remote repository. The code also includes helper functions like `_current_branch` for getting the current Git branch and `_slugify` for generating a slug from text.",
+    "functions": [
+      "_run",
+      "_current_branch",
+      "_slugify",
+      "smart_commit_pipeline"
+    ],
+    "classes": [],
+    "imports": [
+      "subprocess",
+      "re"
+    ]
+  },
+  "tools/build_brain.py": {
+    "summary": "```\n\n ```",
+    "functions": [],
+    "classes": [],
+    "imports": [
+      "build_repo_brain",
+      "call_llm"
+    ]
+  },
+  "tools/repo_brain.py": {
+    "summary": "```\n\nThis file is a Python script named `repo_brain.py` that builds a \"brain\" of a repository by summarizing its files and extracting information from them. The script uses the `pathlib` module to navigate through the repository's directory structure, ignoring certain directories and file types specified in the `IGNORE` and `TEXT` sets. It then reads each text file in the repository, extracts Python function names, class names, and import statements using regular expressions, and generates a summary of the file content using an external language model provided by the `call_llm` function. The script saves the directory tree and file summaries to JSON files named `repo_tree.json` and `repo_files.json`, respectively.",
+    "functions": [
+      "build_tree",
+      "extract_python_info",
+      "build_repo_brain"
+    ],
+    "classes": [],
+    "imports": [
+      "Path",
+      "json",
+      "re"
+    ]
+  },
+  "agent/tool_jail.py": {
+    "summary": "```\n\n`",
+    "functions": [
+      "_extract_json",
+      "validate_action"
+    ],
+    "classes": [],
+    "imports": [
+      "json",
+      "re"
+    ]
+  },
+  "agent/decide.py": {
+    "summary": "def main():\n    import argparse\n    parser = argparse.ArgumentParser(description='Decide on the next action for an agent.')\n    parser.add_argument('--state', type=str, required=True, help='JSON string representing the current state of the project.')\n\n    args = parser.parse_args()\n\n    state = json.loads(args.state)\n\n    return decide_next_action(state)\n```",
+    "functions": [
+      "decide_next_action"
+    ],
+    "classes": [],
+    "imports": [
+      "call_llm",
+      "validate_action"
+    ]
+  },
+  "agent/planner.py": {
+    "summary": "```\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\ns\n\n\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns",
+    "functions": [
+      "make_plan"
+    ],
+    "classes": [],
+    "imports": [
+      "call_llm",
+      "extract_target_files"
+    ]
+  },
+  "agent/approval.py": {
+    "summary": "def main():\n    action = \"update\"\n    payload = {\"user_id\": 123, \"new_email\": \"example@example.com\"}\n    \n    approval_result = ask_user_approval(action, payload)\n    print(\"Approval Result:\", approval_result)\n\nif __name__ == \"__main__\":\n    main()\n```\n\n:",
+    "functions": [
+      "ask_user_approval"
+    ],
+    "classes": [],
+    "imports": []
+  },
+  "agent/goal_parser.py": {
+    "summary": "def parse_read_instruction(goal: str, repo_root: str | None = None):\n    import re\n    from pathlib import Path\n\n    g = goal.strip()\n\n    # prefer quoted content\n    m = re.search(\n        r'(?:read|get)\\s+[\\'\"](.+?)[\\'\"]\\s+(?:from|of)\\s+([\\w\\-/\\.]+)',\n        g,\n        flags=re.IGNORECASE\n    )\n\n    if not m:\n        return None\n\n    path = m.group(2).strip()\n\n    # sanity check path\n    if repo_root:\n        repo = Path(repo_root)\n        p = repo / Path(path)\n        if not p.exists() and \".\" not in path:\n            return None\n\n    return {\n        \"action\": \"read_file\",\n        \"path\": Path(path).as_posix(),\n        \"repo_root\": repo_root\n    }\n\ndef parse_delete_instruction(goal: str, repo_root: str | None = None):\n    import re\n    from pathlib import Path\n\n    g = goal.strip()\n\n    # prefer quoted content\n    m = re.search(\n        r'(?:delete|remove)\\s+[\\'\"](.+?)[\\'\"]\\s+(?:from|of)\\s",
+    "functions": [
+      "_looks_like_file",
+      "extract_target_files",
+      "parse_write_instruction"
+    ],
+    "classes": [],
+    "imports": [
+      "re",
+      "Path",
+      "re",
+      "Path"
+    ]
+  },
+  "agent/loop.py": {
+    "summary": "",
+    "functions": [
+      "_valid_path",
+      "run_agent"
+    ],
+    "classes": [],
+    "imports": [
+      "extract_target_files",
+      "ask_user_approval",
+      "decide_next_action",
+      "make_plan",
+      "read_file",
+      "run_tests",
+      "time",
+      "smart_commit_pipeline"
+    ]
+  },
+  "agent/llm.py": {
+    "summary": "# llm.py is a Python script that interacts with a locally running language model (LLM) using the HTTP POST method. It sends a prompt to the LLM, which processes it and generates a response. The response is then returned as a string after stripping any leading or trailing whitespace.\n\n```python\nimport requests\n\nURL = \"http://127.0.0.1:8080/completion\"\n\ndef call_llm(prompt: str) -> str:\n    try:\n        response = requests.post(\n            URL,\n            json={\n                \"prompt\": prompt,\n                \"n_predict\": 512,  # Corrected from 256 to 512\n                \"temperature\": 0.2,\n                \"stop\": [\"",
+    "functions": [
+      "call_llm"
+    ],
+    "classes": [],
+    "imports": [
+      "requests"
+    ]
+  },
+  "agent/repo.py": {
+    "summary": "def list_repo_contents(repo_root: str, include_hidden: bool = False) -> str:\n    root = Path(repo_root)\n    contents = []\n\n    for p in root.rglob(\"*\"):\n        if not p.is_dir():\n            name = str(p.relative_to(root))\n            if include_hidden or not name.startswith(\".\"):\n                contents.append(name)\n\n    return \"\\n\".join(contents)\n\ndef get_repo_size(repo_root: str) -> int:\n    root = Path(repo_root)\n    size = 0\n\n    for p in root.rglob(\"*\"):\n        if p.is_file():\n            size += p.stat().st_size\n\n    return size\n```\n\nFILE DESCRIPTION:\n\nThis Python script, `repo.py`, provides functions to interact with a repository. It includes three main functionalities:\n1. **build_repo_summary**: This function generates a summary of the files in the repository up to a specified maximum number (`max_files`). It excludes files within the `.git` directory.\n2. **list_repo_contents**: This function lists all non-directory contents of the repository, optionally including hidden files if `include_hidden` is set to `True`.\n3. **get_repo_size**: This function calculates and returns the total size of all files in the repository.\n\nEach function uses Python's",
+    "functions": [
+      "build_repo_summary"
+    ],
+    "classes": [],
+    "imports": [
+      "Path"
+    ]
+  },
+  "runtime/state.py": {
+    "summary": ":\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\ns",
+    "functions": [],
+    "classes": [
+      "class"
+    ],
+    "imports": [
+      "dataclass",
+      "List"
+    ]
+  }
+}
