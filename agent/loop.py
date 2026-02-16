@@ -5,6 +5,7 @@ from agent.goal_parser import extract_target_files, parse_write_instruction
 from agent.approval import ask_user_approval
 from agent.decide import decide_next_action
 from agent.planner import make_plan
+from agent.goal_parser import extract_multiline_append
 
 from tools.fs_tools import read_file, write_file
 from tools.shell_tools import run_tests
@@ -59,11 +60,18 @@ def run_agent(state):
 
             # If parsed concrete write exists and file not yet modified, prefer it
             if action is None:
-                parsed = parse_write_instruction(state.goal, state.repo_root)
-                if parsed and parsed.get("path") and parsed.get("content"):
-                    if parsed["path"] not in state.files_modified:
-                        action = parsed
+                
+            
+                multi = extract_multiline_append(state.goal)
+                if multi and multi["path"] not in state.files_modified:
+                    action = multi
+                else:
+                    parsed = parse_write_instruction(state.goal, state.repo_root)
+                    if parsed and parsed.get("path") and parsed.get("content"):
+                        if parsed["path"] not in state.files_modified:
+                            action = parsed
 
+            
             # otherwise ask the model
             if action is None:
                 action = decide_next_action(state) or {}

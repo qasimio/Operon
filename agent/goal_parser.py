@@ -83,3 +83,43 @@ def parse_write_instruction(goal: str, repo_root: str | None = None):
         "content": content,
         "mode": mode
     }
+
+def extract_multiline_append(goal: str):
+
+    """
+    Detect goals like:
+
+    Append the following code ... to file X:
+
+    <MULTILINE BLOCK>
+
+    Returns:
+    {"path": "...", "content": "...", "mode":"append"}
+    """
+
+    import re
+
+    # find file target first
+    m = re.search(r'file\s+([\w\-/\.]+)', goal, re.IGNORECASE)
+    if not m:
+        return None
+
+    path = m.group(1)
+
+    # everything after first blank line is treated as payload
+    parts = goal.split("\n\n", 1)
+
+    if len(parts) < 2:
+        return None
+
+    payload = parts[1].strip()
+
+    if not payload:
+        return None
+
+    return {
+        "action": "write_file",
+        "path": path,
+        "content": "\n" + payload + "\n",
+        "mode": "append"
+    }
