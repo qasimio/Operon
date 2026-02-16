@@ -2,6 +2,44 @@
 import subprocess
 from typing import Dict
 import datetime
+import subprocess
+import re
+
+
+def _run(cmd, cwd):
+    return subprocess.run(
+        cmd,
+        cwd=cwd,
+        capture_output=True,
+        text=True
+    )
+
+
+def _slugify(text):
+    text = text.lower()
+    text = re.sub(r'[^a-z0-9 ]', '', text)
+    words = text.split()[:3]
+    return "-".join(words) if words else "update"
+
+
+def smart_commit_pipeline(goal, repo_root):
+
+    # derive branch name from goal
+    slug = _slugify(goal)
+    branch = f"agent/{slug}"
+
+    _run(["git", "checkout", "-b", branch], repo_root)
+    _run(["git", "add", "."], repo_root)
+
+    # commit message = short version of goal
+    msg = goal[:60]
+
+    _run(["git", "commit", "-m", msg], repo_root)
+
+    # push quietly (ignore failure if remote missing)
+    _run(["git", "push", "-u", "origin", branch], repo_root)
+
+
 
 def run_git(cmd: list, repo_root: str) -> Dict:
     try:

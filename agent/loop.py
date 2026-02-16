@@ -98,16 +98,16 @@ def run_agent(state):
                 obs = {"success": False, "error": str(e), "path": path}
 
             state.observations.append(obs)
-
             if obs.get("success"):
-                # avoid duplicate entries
                 if path not in state.files_modified:
                     state.files_modified.append(path)
 
-                # stop after a successful write (you can change this logic later)
+                # AUTO COMMIT PIPELINE
+                from tools.git_tools import smart_commit_pipeline
+
+                smart_commit_pipeline(state.goal, state.repo_root)
+
                 state.done = True
-            else:
-                state.errors.append(obs.get("error"))
 
         # ================= RUN TESTS =================
         elif act == "run_tests":
