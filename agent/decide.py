@@ -1,62 +1,82 @@
-# agent/decide.py
 from agent.llm import call_llm
-import json
-import re
-from typing import Dict
+from agent.tool_jail import validate_action
 
-ACTION_SCHEMA_EXAMPLE = {
-    "action": "read_file",
-    "path": "src/utils.py"
-}
 
-# Minimal allowed actions and examples are explicitly listed to reduce hallucination.
-def decide_next_action(state) -> Dict:
+def decide_next_action(state):
+
     prompt = f"""
-You are a deterministic execution agent.
+You are NOT a chatbot.
+You are NOT a terminal.
+You are NOT a human assistant.
 
-NEVER chat.
-NEVER explain.
-ONLY output valid JSON.
+You are a deterministic software execution controller.
 
-Choose ONE action.
+Your ONLY job is to output ONE valid JSON tool call.
 
-Valid actions:
-read_file(path)
-write_file(path, content)
-run_tests()
-git_commit(message)
-stop()
+You CANNOT:
+- write explanations
+- write shell commands
+- write steps
+- write markdown
+- write greetings
+- output anything except JSON
 
-Goal:
+AVAILABLE TOOLS:
+
+read_file
+{{"action":"read_file","path":"relative_path"}}
+
+write_file
+{{"action":"write_file","path":"relative_path","content":"new_file_content"}}
+
+run_tests
+{{"action":"run_tests"}}
+
+git_commit
+{{"action":"git_commit","message":"commit message"}}
+
+stop
+{{"action":"stop"}}
+
+GOAL:
 {state.goal}
 
-Plan:
+PLAN:
 {state.plan}
 
-Files read:
+FILES READ:
 {state.files_read}
 
-Files modified:
+FILES MODIFIED:
 {state.files_modified}
 
-Return JSON ONLY.
+LAST ACTION:
+{state.last_action}
+
+OUTPUT JSON ONLY:
 """
 
-    output = call_llm(prompt)
+    raw = call_llm(prompt)
 
-    # Try to parse JSON strictly
-    try:
-        return json.loads(output)
-    except json.JSONDecodeError:
-        # extract first {...} block
-        m = re.search(r"\{.*\}", output, re.DOTALL)
-        if m:
-            try:
-                return json.loads(m.group(0))
-            except json.JSONDecodeError:
-                pass
-    # fallback
-    return {"action": "stop", "error": "failed_to_parse", "raw": output}
+    action, err = validate_action(raw)
+
+    # retry once if broken
+    if err:
+        retry_prompt = f"""
+Your previous output was INVALID because: {err}
+
+You MUST output ONLY valid JSON.
+
+Retry now.
+"""
+        raw = call_llm(prompt + retry_prompt)
+        action, err = validate_action(raw)
+
+    # final fallback safety
+    if err:
+        return {"action": "stop", "error": err}
+
+    return action
 
 
 

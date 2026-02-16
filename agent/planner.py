@@ -6,6 +6,11 @@ def make_plan(goal: str, repo_root: str):
     repo_summary = build_repo_summary(repo_root)
 
     prompt = f"""
+You are planning for an automated tool agent.
+Do NOT include shell commands.
+Do NOT include "cd".
+Only describe logical actions.
+
 You are an execution-only coding agent.
 
 Your job: produce a SHORT actionable plan.
