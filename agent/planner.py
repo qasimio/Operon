@@ -1,9 +1,11 @@
+from agent.goal_parser import extract_target_files
 from agent.llm import call_llm
 from agent.repo import build_repo_summary
 
 def make_plan(goal: str, repo_root: str):
 
     repo_summary = build_repo_summary(repo_root)
+    targets = extract_target_files(goal)
 
     prompt = f"""
 You are planning for an automated tool agent.
@@ -16,6 +18,7 @@ You are an execution-only coding agent.
 Your job: produce a SHORT actionable plan.
 
 STRICT RULES:
+- ONLY operate on these files: {targets}
 - return between 3 and 6 steps ONLY
 - each step must contain REAL TEXT
 - do NOT return empty numbering

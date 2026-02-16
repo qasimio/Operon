@@ -20,6 +20,8 @@ You CANNOT:
 - write markdown
 - write greetings
 - output anything except JSON
+- Do NOT use git_commit unless files were modified.
+
 
 AVAILABLE TOOLS:
 

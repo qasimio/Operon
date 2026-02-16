@@ -1,3 +1,6 @@
+# agent/loop.py (replace entire file with this)
+
+from agent.goal_parser import extract_target_files
 from agent.approval import ask_user_approval
 from agent.decide import decide_next_action
 from agent.planner import make_plan
@@ -41,9 +44,18 @@ def run_agent(state):
         state.last_action = act
         state.step_count += 1
 
+        allowed_files = extract_target_files(state.goal)
+
+        if allowed_files:
+            path = action.get("path")
+            if path and path.lower() not in allowed_files:
+                state.errors.append(f"Blocked unauthorized file: {path}")
+                state.done = True
+                continue
+
+
         # ================= READ FILE =================
         if act == "read_file":
-
             path = _valid_path(action)
             if not path:
                 state.errors.append(f"read_file missing valid path: {action}")
@@ -57,40 +69,48 @@ def run_agent(state):
             state.observations.append(obs)
 
             if obs.get("success"):
-                state.files_read.append(path)
+                if path not in state.files_read:
+                    state.files_read.append(path)
             else:
                 state.errors.append(obs.get("error"))
 
         # ================= WRITE FILE =================
         elif act == "write_file":
-
             path = _valid_path(action)
             if not path:
                 state.errors.append(f"write_file missing valid path: {action}")
                 continue
 
-            # 🚨 HUMAN APPROVAL GATE
+            # approval gate
             if not ask_user_approval("write_file", action):
                 state.errors.append("User denied write_file")
+                # If user denies, we stop to avoid repeated requests
+                state.done = True
                 continue
 
+            # default to append behaviour unless explicitly asked to overwrite
+            mode = action.get("mode", "append")  # "append" or "overwrite"
             content = action.get("content", "")
 
             try:
-                obs = write_file(path, content, state.repo_root)
+                obs = write_file(path, content, state.repo_root, mode=mode)
             except Exception as e:
                 obs = {"success": False, "error": str(e), "path": path}
 
             state.observations.append(obs)
 
             if obs.get("success"):
-                state.files_modified.append(path)
+                # avoid duplicate entries
+                if path not in state.files_modified:
+                    state.files_modified.append(path)
+
+                # stop after a successful write (you can change this logic later)
+                state.done = True
             else:
                 state.errors.append(obs.get("error"))
 
         # ================= RUN TESTS =================
         elif act == "run_tests":
-
             try:
                 obs = run_tests(state.repo_root)
             except Exception as e:
@@ -105,10 +125,19 @@ def run_agent(state):
 
         # ================= GIT COMMIT =================
         elif act == "git_commit":
+            # If no files were modified, ask user whether to continue with empty commit
+            if not state.files_modified:
+                ok = ask_user_approval("git_commit", {"note": "No files modified. Proceed with commit?"})
+                if not ok:
+                    state.errors.append("User denied git_commit due to no modified files")
+                    # don't mark done; let agent decide next (or we stop to avoid loop)
+                    state.done = True
+                    continue
 
-            # 🚨 HUMAN APPROVAL GATE
+            # approval for commit (even if files modified)
             if not ask_user_approval("git_commit", action):
                 state.errors.append("User denied git_commit")
+                state.done = True
                 continue
 
             prefix = action.get("branch_prefix", "agent/refactor")
@@ -121,7 +150,9 @@ def run_agent(state):
 
             state.observations.append(obs)
 
-            if not obs.get("success"):
+            if obs.get("success"):
+                state.done = True  # stop after successful commit
+            else:
                 state.errors.append(obs.get("error", str(obs)))
 
         # ================= STOP =================
@@ -137,17 +168,3 @@ def run_agent(state):
         time.sleep(0.2)
 
     return state
-
-
-
-
-"""
-Repeat:
-    Ask AI what to do next
-    Execute that action
-    Record what happened
-Stop when:
-    AI says stop
-    OR 20 steps reached
-Return the final agent memory
-"""
