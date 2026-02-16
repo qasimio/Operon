@@ -6,7 +6,7 @@ def search_repo(repo_root, query):
 
     repo = Path(repo_root)
 
-    with open(repo/"repo_files.json") as f:
+    with open(repo / "repo_files.json") as f:
         data = json.load(f)
 
     hits = []
@@ -23,8 +23,7 @@ def search_repo(repo_root, query):
             " ".join(info.get("imports",[])).lower()
         ])
 
-
         if q in blob:
-            hits.append(file)
+            hits.append(file)   # IMPORTANT: file already contains full repo path
 
     return hits[:5]

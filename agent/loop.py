@@ -108,6 +108,11 @@ def run_agent(state):
             else:
                 state.errors.append(obs.get("error"))
 
+                # IMPORTANT: mark as attempted so we don't retry forever
+                if path not in state.files_read:
+                    state.files_read.append(path)
+
+
         # ================= WRITE FILE =================
         elif act == "write_file":
             path = _valid_path(action)
