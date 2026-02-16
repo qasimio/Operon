@@ -1,38 +1,27 @@
-from agent.goal_parser import extract_target_files
 from agent.llm import call_llm
-from agent.repo import build_repo_summary
+from agent.goal_parser import extract_target_files
+
 
 def make_plan(goal: str, repo_root: str):
 
-    repo_summary = build_repo_summary(repo_root)
-    targets = extract_target_files(goal)
+    targets = extract_target_files(repo_root, goal)
 
     prompt = f"""
-You are planning for an automated tool agent.
-Do NOT include shell commands.
-Do NOT include "cd".
-Only describe logical actions.
-
-You are an execution-only coding agent.
-
-Your job: produce a SHORT actionable plan.
+You are planning for an automated software agent.
 
 STRICT RULES:
+
 - ONLY operate on these files: {targets}
-- return between 3 and 6 steps ONLY
-- each step must contain REAL TEXT
-- do NOT return empty numbering
-- do NOT explain anything
-- do NOT chat
-- output ONE step per line
+- NEVER invent new files
+- NEVER mention git commands
+- NEVER mention shell commands
+- ONLY describe logical editing steps
+
+Return 3–5 short steps only.
+One step per line.
 
 GOAL:
 {goal}
-
-FILES:
-{repo_summary}
-
-PLAN:
 """
 
     output = call_llm(prompt)
@@ -41,19 +30,10 @@ PLAN:
 
     for line in output.splitlines():
         line = line.strip()
-
-        if not line:
-            continue
-
-        # remove leading numbers like "1." or "2)"
-        while len(line) > 0 and (line[0].isdigit() or line[0] in ". )-"):
-            line = line[1:].strip()
-
-        if len(line) > 3:  # ignore garbage like "1."
+        if line:
             steps.append(line)
 
-    # 🚑 fallback if model still dumb
-    if len(steps) == 0:
+    if not steps:
         steps = [
             "Locate target file",
             "Read the file",
@@ -63,13 +43,3 @@ PLAN:
         ]
 
     return steps[:6]
-
-
-
-"""
-Ask the AI to make a numbered plan for the coding goal.
-Take whatever text it writes.
-Split it into lines.
-Remove blank junk.
-Return the lines as a Python list.
-"""

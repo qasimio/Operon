@@ -1,12 +1,10 @@
-# agent/loop.py (replace entire file with this)
-
-from agent.goal_parser import extract_target_files
+# agent/loop.py (overwrite)
+from agent.goal_parser import extract_target_files, parse_write_instruction
 from agent.approval import ask_user_approval
 from agent.decide import decide_next_action
 from agent.planner import make_plan
 
 from tools.fs_tools import read_file, write_file
-from tools.git_tools import commit_to_new_branch
 from tools.shell_tools import run_tests
 
 import time
@@ -16,7 +14,7 @@ MAX_STEPS = 30
 
 def _valid_path(action):
     """Return a safe string path or None."""
-    path = action.get("path")
+    path = action.get("path") if isinstance(action, dict) else None
     if isinstance(path, str) and path.strip():
         return path
     return None
@@ -33,26 +31,46 @@ def run_agent(state):
     # ---------- main loop ----------
     while not state.done and state.step_count < MAX_STEPS:
 
-        # ---------- get next action safely ----------
+        # ---------- determine next action (deterministic first moves) ----------
         try:
-            action = decide_next_action(state) or {}
+            action = None
+
+            # If nothing has been read yet, force a read of the primary target file
+            if not state.files_read:
+                targets = extract_target_files(state.repo_root, state.goal)
+                if targets:
+                    action = {"action": "read_file", "path": targets[0]}
+
+            # If parsed concrete write exists and file not yet modified, prefer it
+            if action is None:
+                parsed = parse_write_instruction(state.goal, state.repo_root)
+                if parsed and parsed.get("path") and parsed.get("content"):
+                    if parsed["path"] not in state.files_modified:
+                        action = parsed
+
+            # otherwise ask the model
+            if action is None:
+                action = decide_next_action(state) or {}
+
         except Exception as e:
             state.errors.append(f"decide_next_action crashed: {e}")
             break
+
+        # DEBUG: show what action we will execute
+        print("DEBUG ACTION:", action)
 
         act = action.get("action")
         state.last_action = act
         state.step_count += 1
 
-        allowed_files = extract_target_files(state.goal)
-
+        # ---------- file-lock guard ----------
+        allowed_files = extract_target_files(state.repo_root, state.goal)
         if allowed_files:
             path = action.get("path")
-            if path and path.lower() not in allowed_files:
+            if path and path.lower() not in [p.lower() for p in allowed_files]:
                 state.errors.append(f"Blocked unauthorized file: {path}")
                 state.done = True
                 continue
-
 
         # ================= READ FILE =================
         if act == "read_file":
@@ -81,10 +99,9 @@ def run_agent(state):
                 state.errors.append(f"write_file missing valid path: {action}")
                 continue
 
-            # approval gate
+            # approval gate (always triggered)
             if not ask_user_approval("write_file", action):
                 state.errors.append("User denied write_file")
-                # If user denies, we stop to avoid repeated requests
                 state.done = True
                 continue
 
@@ -100,14 +117,19 @@ def run_agent(state):
             state.observations.append(obs)
 
             if obs.get("success"):
-                # avoid duplicate entries
                 if path not in state.files_modified:
                     state.files_modified.append(path)
 
-                # stop after a successful write (you can change this logic later)
+                # AUTO COMMIT (deterministic, not LLM controlled)
+                try:
+                    from tools.git_tools import smart_commit_pipeline
+                    smart_commit_pipeline(state.goal, state.repo_root)
+                    print("DEBUG: auto-commit executed")
+                except Exception as e:
+                    print("DEBUG: commit skipped:", e)
+
                 state.done = True
-            else:
-                state.errors.append(obs.get("error"))
+
 
         # ================= RUN TESTS =================
         elif act == "run_tests":
@@ -122,38 +144,6 @@ def run_agent(state):
                 state.errors.append(
                     f"tests_failed: {obs.get('returncode', obs.get('error'))}"
                 )
-
-        # ================= GIT COMMIT =================
-        elif act == "git_commit":
-            # If no files were modified, ask user whether to continue with empty commit
-            if not state.files_modified:
-                ok = ask_user_approval("git_commit", {"note": "No files modified. Proceed with commit?"})
-                if not ok:
-                    state.errors.append("User denied git_commit due to no modified files")
-                    # don't mark done; let agent decide next (or we stop to avoid loop)
-                    state.done = True
-                    continue
-
-            # approval for commit (even if files modified)
-            if not ask_user_approval("git_commit", action):
-                state.errors.append("User denied git_commit")
-                state.done = True
-                continue
-
-            prefix = action.get("branch_prefix", "agent/refactor")
-            message = action.get("message", "agent automated commit")
-
-            try:
-                obs = commit_to_new_branch(prefix, message, state.repo_root)
-            except Exception as e:
-                obs = {"success": False, "error": str(e)}
-
-            state.observations.append(obs)
-
-            if obs.get("success"):
-                state.done = True  # stop after successful commit
-            else:
-                state.errors.append(obs.get("error", str(obs)))
 
         # ================= STOP =================
         elif act == "stop":
