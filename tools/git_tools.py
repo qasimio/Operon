@@ -3,12 +3,19 @@ import re
 
 
 def _run(cmd, cwd):
-    return subprocess.run(
+    r = subprocess.run(
         cmd,
         cwd=cwd,
         capture_output=True,
         text=True
     )
+    print("GIT:", " ".join(cmd))
+    if r.stdout:
+        print(r.stdout)
+    if r.stderr:
+        print(r.stderr)
+    return r
+
 
 
 def _current_branch(repo_root):

@@ -1,8 +1,11 @@
 # agent/loop.py (overwrite)
+from runtime import state
+from tools.repo_search import search_repo
 from agent.goal_parser import extract_target_files, parse_write_instruction
 from agent.approval import ask_user_approval
 from agent.decide import decide_next_action
 from agent.planner import make_plan
+from agent.goal_parser import extract_multiline_append
 
 from tools.fs_tools import read_file, write_file
 from tools.shell_tools import run_tests
@@ -37,17 +40,38 @@ def run_agent(state):
 
             # If nothing has been read yet, force a read of the primary target file
             if not state.files_read:
+
+                # 1️⃣ First try explicit file in goal
                 targets = extract_target_files(state.repo_root, state.goal)
+
+                # 2️⃣ If none found → use repo search intelligence
+                if not targets:
+                    try:
+                        targets = search_repo(state.repo_root, state.goal)
+                        if targets:
+                            print("SEARCH HIT:", targets[0])
+                    except:
+                        targets = []
+
+                # 3️⃣ read first candidate if any
                 if targets:
                     action = {"action": "read_file", "path": targets[0]}
 
+
             # If parsed concrete write exists and file not yet modified, prefer it
             if action is None:
-                parsed = parse_write_instruction(state.goal, state.repo_root)
-                if parsed and parsed.get("path") and parsed.get("content"):
-                    if parsed["path"] not in state.files_modified:
-                        action = parsed
+                
+            
+                multi = extract_multiline_append(state.goal)
+                if multi and multi["path"] not in state.files_modified:
+                    action = multi
+                else:
+                    parsed = parse_write_instruction(state.goal, state.repo_root)
+                    if parsed and parsed.get("path") and parsed.get("content"):
+                        if parsed["path"] not in state.files_modified:
+                            action = parsed
 
+            
             # otherwise ask the model
             if action is None:
                 action = decide_next_action(state) or {}
@@ -91,6 +115,11 @@ def run_agent(state):
                     state.files_read.append(path)
             else:
                 state.errors.append(obs.get("error"))
+
+                # IMPORTANT: mark as attempted so we don't retry forever
+                if path not in state.files_read:
+                    state.files_read.append(path)
+
 
         # ================= WRITE FILE =================
         elif act == "write_file":
