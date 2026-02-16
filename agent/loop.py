@@ -37,6 +37,7 @@ def run_agent(state):
         state.step_count += 1
 
         act = action.get("action")
+        print("\nPLAN:", state.plan, "\n")
 
         # ---------------- READ FILE ----------------
         if act == "read_file":
