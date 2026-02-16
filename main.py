@@ -3,7 +3,7 @@ from agent.loop import run_agent
 
 if __name__ == "__main__":
     state = AgentState(
-        goal= "add a comment that says I am Qasim's L-SEEA in readme.md",
+        goal=input("Enter clear task with proper goal: "),
         repo_root="/home/UserX/Master/LSEEA"
     )
 
