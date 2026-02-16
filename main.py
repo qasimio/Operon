@@ -3,7 +3,7 @@ from agent.loop import run_agent
 
 if __name__ == "__main__":
     state = AgentState(
-        goal='append "# this comment is added by L-SEEA on the order of MQ" to build_brain.py',
+        goal='append "# this comment is added by L-SEEA from MQ" to tools/build_brain.py',
 
         repo_root="/home/UserX/Master/LSEEA"
     )
