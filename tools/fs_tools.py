@@ -49,10 +49,3 @@ def write_file(path: str, content: str, repo_root: str, mode: str = "append") ->
 """
 Try to read a file inside a repo. If it works, return the text and size. If it fails, return the error instead of crashing.
 """
-
-1. It logs every write operation to logs/operon.log
-2. Each log should contain:
-   - timestamp
-   - filename
-   - mode
-3. Do NOT change existing functionality.
