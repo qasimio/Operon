@@ -1,6 +1,8 @@
 from pathlib import Path
 import json
 import re
+import ast
+
 
 IGNORE = {".git",".venv","__pycache__","node_modules","dist","build"}
 
@@ -57,6 +59,7 @@ def build_repo_brain(repo_root, call_llm):
 
         try:
             content = f.read_text(errors="ignore")
+            structure = extract_python_structure_ast(content)
         except:
             continue
 
@@ -78,8 +81,8 @@ CONTENT:
 
         brain[str(f.relative_to(repo))] = {
             "summary": summary,
-            "functions": funcs,
-            "classes": classes,
+            "functions": structure["functions"],
+            "classes": structure["classes"],
             "imports": imports
         }
 
@@ -93,3 +96,55 @@ CONTENT:
         json.dump(brain, f, indent=2)
 
     print("Repo brain created.")
+
+def extract_python_structure_ast(code: str):
+
+    results = {
+        "functions": [],
+        "classes": []
+    }
+
+    try:
+        tree = ast.parse(code)
+    except Exception:
+        return results
+
+    class Visitor(ast.NodeVisitor):
+
+        def visit_FunctionDef(self, node):
+            results["functions"].append({
+                "name": node.name,
+                "start": node.lineno,
+                "end": getattr(node, "end_lineno", node.lineno),
+            })
+            self.generic_visit(node)
+
+        def visit_AsyncFunctionDef(self, node):
+            results["functions"].append({
+                "name": node.name,
+                "start": node.lineno,
+                "end": getattr(node, "end_lineno", node.lineno),
+            })
+            self.generic_visit(node)
+
+        def visit_ClassDef(self, node):
+
+            results["classes"].append({
+                "name": node.name,
+                "start": node.lineno,
+                "end": getattr(node, "end_lineno", node.lineno),
+            })
+
+            for child in node.body:
+                if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    results["functions"].append({
+                        "name": f"{node.name}.{child.name}",
+                        "start": child.lineno,
+                        "end": getattr(child, "end_lineno", child.lineno),
+                    })
+
+            self.generic_visit(node)
+
+    Visitor().visit(tree)
+
+    return results
