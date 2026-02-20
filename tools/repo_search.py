@@ -14,13 +14,8 @@ def search_repo(repo_root, query):
 
     for file, info in data.items():
 
-        blob = " ".join([
-            file.lower(),
-            info.get("summary","").lower(),
-            " ".join(info.get("functions",[])).lower(),
-            " ".join(info.get("classes",[])).lower(),
-            " ".join(info.get("imports",[])).lower()
-        ])
+        blob = " ".join(
+            [f["name"] for f in info.get("functions", [])]).lower(),
 
         if q in blob:
             hits.append(file)   # IMPORTANT: file already contains full repo path
