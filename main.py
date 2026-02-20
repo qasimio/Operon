@@ -6,12 +6,8 @@ if __name__ == "__main__":
         goal="""
 Modify the write_file function in tools/fs_tools.py so that:
 
-1. It logs every write operation to logs/operon.log
-2. Each log should contain:
-   - timestamp
-   - filename
-   - mode
-3. Do NOT change existing functionality.
+Add a print("WRITE CALLED") at start of write_file function.
+- Do NOT change existing functionality.
 """,
         repo_root="/home/UserX/Master/Operon"
     )

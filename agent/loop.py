@@ -245,26 +245,59 @@ def run_agent(state):
             mode = action.get("mode", "append")  # "append" or "overwrite"
             content = action.get("content", "")
 
-            # special-case: function-level replacement
-            func_name = action.get("function_name") or action.get("target_function")
-            if (path == "function" or func_name) and func_name:
-                # new_code should be the model's generated function text
-                new_code = content
+            # special: function-level rewrite
+            if action.get("path") == "function":
 
-                if not _safe_function_rewrite(func_name, new_code):
-                    state.errors.append("LLM returned unsafe rewrite — aborting")
+                # find function name from goal
+                func_name = None
+                for word in state.goal.replace("(", " ").split():
+                    if find_function(state.repo_root, word):
+                        func_name = word
+                        break
+
+                if not func_name:
+                    state.errors.append("Could not detect target function")
                     state.done = True
                     continue
 
-                # locate exact slice for this function
+                # load current function slice
                 slice_data = load_function_slice(state.repo_root, func_name)
                 if not slice_data:
-                    state.errors.append(f"function slice not found for: {func_name}")
+                    state.errors.append("Function slice not found")
+                    state.done = True
+                    continue
+
+                # get the CURRENT function code
+                current_code = slice_data["code"]
+
+                # 🔥 THIS IS THE MISSING PART: ASK LLM FOR REWRITE
+                prompt = f"""
+            Rewrite this Python function to satisfy the goal.
+
+            GOAL:
+            {state.goal}
+
+            FUNCTION:
+            {current_code}
+
+            Return ONLY the rewritten function code.
+            No explanation.
+            No markdown.
+            """
+
+                from agent.llm import call_llm
+                new_code = call_llm(prompt)
+
+                if f"def {func_name}" not in new_code:
+                    state.errors.append("LLM failed to generate valid function")
                     state.done = True
                     continue
 
                 obs = _replace_function_in_file(state.repo_root, slice_data, new_code)
+
                 state.observations.append(obs)
+                state.done = True
+                continue
 
                 if obs.get("success"):
                     if slice_data.get("file") not in state.files_modified:

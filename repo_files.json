@@ -42,7 +42,7 @@
     ]
   },
   "tools/fs_tools.py": {
-    "summary": "Just one simple sentence.\n\nThis Python script provides functions to read from and write to files within a repository, handling errors gracefully and ensuring proper file creation and appending.",
+    "summary": "Just one simple sentence.\n\nThis Python script provides functions to read from and write to files within a repository, handling errors gracefully and providing detailed feedback on success or failure.",
     "functions": [
       {
         "name": "read_file",
@@ -77,7 +77,7 @@
     ]
   },
   "tools/git_tools.py": {
-    "summary": "Just one simple sentence describing the purpose of the script.\n\n:",
+    "summary": "Just one simple sentence.\n\n:",
     "functions": [
       {
         "name": "_run",
@@ -107,7 +107,7 @@
     ]
   },
   "tools/build_brain.py": {
-    "summary": "Provides functions  and classes .",
+    "summary": "Just one simple sentence describing the purpose and functionality of the script.\n\nThis Python script uses functions from two modules to build a repository brain for a specified directory and then calls an LLM (Large Language Model) to process it.",
     "functions": [],
     "classes": [],
     "imports": [
@@ -282,7 +282,7 @@
     "imports": []
   },
   "agent/goal_parser.py": {
-    "summary": "Just a simple explanation.\n\n:\n\n\n\n\n\n\n\n\n\n\n\n\ns",
+    "summary": "Just a single sentence describing the purpose of the file.\n\n:\n\n\n\n\n\n\n\n\ns",
     "functions": [
       {
         "name": "_looks_like_file",
@@ -333,7 +333,7 @@
       {
         "name": "run_agent",
         "start": 118,
-        "end": 331
+        "end": 368
       }
     ],
     "classes": [],
@@ -351,6 +351,7 @@
       "Path",
       "time",
       "re",
+      "call_llm",
       "smart_commit_pipeline",
       "smart_commit_pipeline"
     ]
@@ -370,7 +371,7 @@
     ]
   },
   "agent/repo.py": {
-    "summary": "Just a single sentence describing the functionality of the file.\n\n:",
+    "summary": "Provides functions build_repo_summary and classes .",
     "functions": [
       {
         "name": "build_repo_summary",
@@ -384,7 +385,7 @@
     ]
   },
   "runtime/state.py": {
-    "summary": "Just a single sentence.\n\nThis Python script defines a dataclass named `AgentState` that tracks the state of an AI worker, including its goal, repository root, plan, files read and modified, last action, observations, errors, step count, and whether it's done.\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\ns\n\n\ns",
+    "summary": "Just a single sentence.\n\nThis Python script defines a data class named `AgentState` that tracks the state of an AI agent working on a task, including its goal, repository root, plan, files read and modified, last action, observations, errors, step count, and whether it's done with the task.",
     "functions": [],
     "classes": [
       {

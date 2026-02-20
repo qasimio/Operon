@@ -9,6 +9,7 @@
   "agent/planner.py",
   "agent/repo.py",
   "agent/tool_jail.py",
+  "function",
   "main.py",
   "readme.md",
   "repo_files.json",
