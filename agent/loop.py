@@ -24,6 +24,9 @@ def _detect_function_from_goal(goal, repo_root):
 
 def _rewrite_function(state, func_name, slice_data, file_path):
 
+    from pathlib import Path
+    import re
+
     current_code = slice_data["code"]
 
     prompt = f"""
@@ -35,17 +38,32 @@ GOAL:
 FUNCTION:
 {current_code}
 
-RULES:
-- output ONLY python function
-- no markdown
-- no explanation
-- must start with def
+STRICT RULES:
+Return ONLY the full python function.
+No markdown.
+No explanation.
+Must start with: def {func_name}
+Do not rename parameters.
 """
 
-    new_code = call_llm(prompt).strip()
+    raw = call_llm(prompt)
 
-    if not new_code.startswith("def "):
-        return {"success": False, "error": "LLM invalid output"}
+    if not raw:
+        return {"success": False, "error": "LLM empty"}
+
+    # -------- CLEAN LLM OUTPUT --------
+
+    # remove markdown fences
+    raw = raw.replace("```python","").replace("```","").strip()
+
+    # extract first real function
+    m = re.search(r"(def\s+" + re.escape(func_name) + r"\s*\(.*)", raw, re.S)
+    if not m:
+        return {"success": False, "error": "LLM no function found"}
+
+    new_code = m.group(1).rstrip()
+
+    # -------- PATCH FILE --------
 
     full_path = Path(state.repo_root) / file_path
 
@@ -63,8 +81,6 @@ RULES:
 
     except Exception as e:
         return {"success": False, "error": str(e)}
-
-
 def run_agent(state):
 
     func_name, loc = _detect_function_from_goal(state.goal, state.repo_root)

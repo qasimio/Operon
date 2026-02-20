@@ -11,6 +11,7 @@ def read_file(path: str, repo_root: str) -> Dict:
         return {"success": False, "path": path, "error": str(e)}
 
 def write_file(path: str, content: str, repo_root: str, mode: str = "append") -> Dict:
+    print("WRITE CALLED")
     """
     Write to a file inside repo_root.
 
@@ -40,10 +41,6 @@ def write_file(path: str, content: str, repo_root: str, mode: str = "append") ->
 
         else:  # overwrite
             full_path.write_text(content, encoding="utf-8")
-
-        return {"success": True, "path": path, "mode": mode, "written_bytes": len(content)}
-    except Exception as e:
-        return {"success": False, "path": path, "error": str(e)}
 
 
 """

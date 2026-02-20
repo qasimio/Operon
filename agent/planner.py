@@ -1,17 +1,13 @@
 from agent.llm import call_llm
-from agent.goal_parser import extract_target_files
 
 
 def make_plan(goal: str, repo_root: str):
-
-    targets = extract_target_files(repo_root, goal)
 
     prompt = f"""
 You are planning for an automated software agent.
 
 STRICT RULES:
 
-- ONLY operate on these files: {targets}
 - NEVER invent new files
 - NEVER mention git commands
 - NEVER mention shell commands
