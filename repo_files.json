@@ -9,7 +9,7 @@
     ]
   },
   "readme.md": {
-    "summary": "Just a simple statement describing the content of the README.md file.\n\n't provide any actual content or details from the file itself. The response should be based solely on the information given in the instruction.",
+    "summary": "Provides functions  and classes .",
     "functions": [],
     "classes": [],
     "imports": []
@@ -42,7 +42,7 @@
     ]
   },
   "tools/fs_tools.py": {
-    "summary": "Just one simple sentence.\n\nThis Python script provides functions to read from and write to files within a repository root directory, handling errors gracefully and returning detailed results about the operations performed.",
+    "summary": "Just one simple sentence.\n\nThis Python script provides functions to read from and write to files within a repository, handling errors gracefully and ensuring proper file creation and appending.",
     "functions": [
       {
         "name": "read_file",
@@ -77,7 +77,7 @@
     ]
   },
   "tools/git_tools.py": {
-    "summary": "Just one simple sentence.\n\nThis Python script provides functions for running Git commands and automating common commit workflows based on the current branch and goal description.",
+    "summary": "Just one simple sentence describing the purpose of the script.\n\n:",
     "functions": [
       {
         "name": "_run",
@@ -282,7 +282,7 @@
     "imports": []
   },
   "agent/goal_parser.py": {
-    "summary": "Just a simple explanation.\n\n:\n\n\n\n\n\n\n\n\n\n\n\ns\n\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns",
+    "summary": "Just a simple explanation.\n\n:\n\n\n\n\n\n\n\n\n\n\n\n\ns",
     "functions": [
       {
         "name": "_looks_like_file",
@@ -313,32 +313,27 @@
     ]
   },
   "agent/loop.py": {
-    "summary": "Just a simple explanation.\n\n:",
+    "summary": "Provides functions _valid_path, _safe_function_rewrite, _replace_function_in_file, run_agent and classes .",
     "functions": [
       {
         "name": "_valid_path",
-        "start": 21,
-        "end": 25
-      },
-      {
-        "name": "_latest_function_context",
-        "start": 28,
-        "end": 32
-      },
-      {
-        "name": "_extract_code_from_llm",
-        "start": 35,
-        "end": 39
+        "start": 19,
+        "end": 24
       },
       {
         "name": "_safe_function_rewrite",
-        "start": 41,
-        "end": 64
+        "start": 27,
+        "end": 59
+      },
+      {
+        "name": "_replace_function_in_file",
+        "start": 62,
+        "end": 115
       },
       {
         "name": "run_agent",
-        "start": 66,
-        "end": 228
+        "start": 118,
+        "end": 331
       }
     ],
     "classes": [],
@@ -349,15 +344,15 @@
       "ask_user_approval",
       "decide_next_action",
       "make_plan",
-      "extract_multiline_append",
       "read_file",
       "run_tests",
       "find_function",
       "load_function_slice",
-      "call_llm",
       "Path",
+      "time",
       "re",
-      "time"
+      "smart_commit_pipeline",
+      "smart_commit_pipeline"
     ]
   },
   "agent/llm.py": {
@@ -375,7 +370,7 @@
     ]
   },
   "agent/repo.py": {
-    "summary": "Provides functions build_repo_summary and classes .",
+    "summary": "Just a single sentence describing the functionality of the file.\n\n:",
     "functions": [
       {
         "name": "build_repo_summary",
@@ -389,7 +384,7 @@
     ]
   },
   "runtime/state.py": {
-    "summary": "Just a single sentence.\n\nThis Python script defines a data class named `AgentState` that tracks the state of an AI worker, including its goal, repository root, plan, files read and modified, last action, observations, errors, step count, and whether it's done.\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\ns",
+    "summary": "Just a single sentence.\n\nThis Python script defines a dataclass named `AgentState` that tracks the state of an AI worker, including its goal, repository root, plan, files read and modified, last action, observations, errors, step count, and whether it's done.\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\ns\n\n\ns",
     "functions": [],
     "classes": [
       {

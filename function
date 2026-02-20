@@ -1,0 +1,7 @@
+
+1. It logs every write operation to logs/operon.log
+2. Each log should contain:
+   - timestamp
+   - filename
+   - mode
+3. Do NOT change existing functionality.
