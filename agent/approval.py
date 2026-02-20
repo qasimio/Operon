@@ -1,5 +1,5 @@
 def ask_user_approval(action: str, payload: dict) -> bool:
-    print("\n--- L-SEEA REQUEST ---")
+    print("\n--- Operon REQUEST ---")
     print("Action:", action)
     print("Payload:", payload)
     print("----------------------")
