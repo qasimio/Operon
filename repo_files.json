@@ -42,7 +42,7 @@
     ]
   },
   "tools/fs_tools.py": {
-    "summary": "Just one simple sentence.\n\nThis Python script provides functions to read from and write to files within a repository, handling errors gracefully and providing detailed results about each operation.",
+    "summary": "Provides functions read_file, write_file and classes .",
     "functions": [
       {
         "name": "read_file",
@@ -107,7 +107,7 @@
     ]
   },
   "tools/build_brain.py": {
-    "summary": "Just one simple sentence.\n\nThis Python script builds a brain for a repository located at \"/home/UserX/Master/Operon/\" using the call_llm function to interact with an LLM (Large Language Model).",
+    "summary": "Just one simple sentence.\n\nThis Python script builds a brain for a repository located at \"/home/UserX/Master/Operon/\" using the call_llm function to interact with an LLM (likely a language model).",
     "functions": [],
     "classes": [],
     "imports": [
@@ -234,18 +234,24 @@
     ]
   },
   "agent/decide.py": {
-    "summary": "Provides functions decide_next_action and classes .",
+    "summary": "Provides functions _extract_json, decide_next_action and classes .",
     "functions": [
       {
+        "name": "_extract_json",
+        "start": 7,
+        "end": 17
+      },
+      {
         "name": "decide_next_action",
-        "start": 5,
-        "end": 83
+        "start": 20,
+        "end": 105
       }
     ],
     "classes": [],
     "imports": [
       "call_llm",
-      "validate_action"
+      "json",
+      "re"
     ]
   },
   "agent/planner.py": {
@@ -276,7 +282,7 @@
     "imports": []
   },
   "agent/goal_parser.py": {
-    "summary": "Just a single sentence describing the purpose of the file.\n\n:\n\n\n\n\n\n\n\n\n\ns",
+    "summary": "Just a simple explanation.\n\n:\n\n\n\n\n\n\n\n\n\n\n\n\ns",
     "functions": [
       {
         "name": "_looks_like_file",
@@ -307,43 +313,57 @@
     ]
   },
   "agent/loop.py": {
-    "summary": "Provides functions _valid_path, run_agent, looks_like_instruction and classes .",
+    "summary": "Just a single sentence describing the purpose of the script.\n\n:",
     "functions": [
       {
         "name": "_valid_path",
         "start": 22,
-        "end": 26
+        "end": 27
+      },
+      {
+        "name": "_is_instruction_text",
+        "start": 30,
+        "end": 45
+      },
+      {
+        "name": "_extract_code_from_llm",
+        "start": 48,
+        "end": 58
+      },
+      {
+        "name": "_latest_function_context",
+        "start": 61,
+        "end": 65
       },
       {
         "name": "run_agent",
-        "start": 29,
-        "end": 302
-      },
-      {
-        "name": "looks_like_instruction",
-        "start": 189,
-        "end": 202
+        "start": 68,
+        "end": 326
       }
     ],
     "classes": [],
     "imports": [
+      "state",
       "search_repo",
+      "extract_target_files",
       "ask_user_approval",
       "decide_next_action",
       "make_plan",
+      "extract_multiline_append",
       "read_file",
       "run_tests",
       "find_function",
       "load_function_slice",
-      "time",
       "call_llm",
       "Path",
       "re",
+      "time",
+      "smart_commit_pipeline",
       "smart_commit_pipeline"
     ]
   },
   "agent/llm.py": {
-    "summary": "Provides functions call_llm and classes .",
+    "summary": "Just plain text.\n\n:",
     "functions": [
       {
         "name": "call_llm",
@@ -371,7 +391,7 @@
     ]
   },
   "runtime/state.py": {
-    "summary": "Just a simple explanation.\n\nThis file defines a data class named AgentState that tracks the state of an AI worker, including its goal, repository root, plan, files read and modified, last action, observations, errors, step count, and whether it's done.\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\ns\n\n\ns",
+    "summary": "Provides functions  and classes AgentState.",
     "functions": [],
     "classes": [
       {
