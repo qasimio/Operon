@@ -11,26 +11,12 @@ ALLOWED_ACTIONS = {
 }
 
 
-def _extract_json(text: str):
-    """Pull first JSON object from model output."""
-    try:
-        return json.loads(text)
-    except:
-        m = re.search(r"\{.*\}", text, re.DOTALL)
-        if m:
-            try:
-                return json.loads(m.group(0))
-            except:
-                return None
-    return None
-
-
 def validate_action(raw_output: str):
     """
     Return (valid_dict, error_string)
     """
 
-    data = _extract_json(raw_output)
+    data = json.loads(raw_output)
 
     if not data:
         return None, "no_json"

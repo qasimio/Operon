@@ -38,7 +38,7 @@ def smart_commit_pipeline(goal, repo_root):
     if branch in ("main", "master"):
         slug = _slugify(goal)
         new_branch = f"agent/{slug}"
-        _run(["git", "checkout", "-b", new_branch], repo_root)
+        _run(["git", "checkout", "-B", new_branch], repo_root)
         branch = new_branch
 
     # stage & commit

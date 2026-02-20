@@ -12,9 +12,11 @@ import time
 
 MAX_STEPS = 30
 
-
 def _detect_function_from_goal(goal, repo_root):
-    words = goal.replace("(", " ").replace(")", " ").replace(".", " ").split()
+    # Strip ALL punctuation so we don't miss functions wrapped in backticks or quotes
+    import re
+    clean_goal = re.sub(r"[^\w\s]", " ", goal)
+    words = clean_goal.split()
     for w in words:
         loc = find_function(repo_root, w)
         if loc:
@@ -23,80 +25,72 @@ def _detect_function_from_goal(goal, repo_root):
 
 
 def _rewrite_function(state, func_name, slice_data, file_path):
-
     from pathlib import Path
-    import re
-
+    from tools.diff_engine import parse_search_replace, apply_patch
+    
     current_code = slice_data["code"]
 
-    prompt = f"""
-You are modifying an EXISTING Python function.
+    prompt = (
+        "You are Operon, a surgical code editor.\n"
+        f"GOAL: {state.goal}\n\n"
+        "CURRENT FUNCTION TO MODIFY:\n"
+        "```python\n"
+        f"{current_code}\n"
+        "```\n\n"
+        "INSTRUCTIONS:\n"
+        "You must modify the code using a SEARCH/REPLACE block.\n"
+        "1. Find the exact original lines you need to change.\n"
+        "2. Output a SEARCH block with the exact original lines.\n"
+        "3. Output a REPLACE block with the new lines.\n\n"
+        "EXAMPLE OUTPUT FORMAT:\n"
+        "<<<<<<< SEARCH\n"
+        "    def hello_world():\n"
+        "        print(\"hello\")\n"
+        "=======\n"
+        "    def hello_world():\n"
+        "        print(\"hello, world!\")\n"
+        ">>>>>>> REPLACE\n\n"
+        "RULES:\n"
+        "- The SEARCH block must EXACTLY match the existing code character-for-character.\n"
+        "- Keep the changes minimal. Do not replace the whole function.\n"
+        "- ONLY output the SEARCH/REPLACE block. No conversational text.\n"
+    )
 
-GOAL:
-{state.goal}
+    raw_output = call_llm(prompt, require_json=False)
 
-CURRENT FUNCTION:
-{current_code}
-
-CRITICAL RULES:
-- preserve ALL existing code
-- do NOT delete any lines
-- do NOT rename variables
-- keep indentation identical
-- only insert minimal changes
-- return FULL function only
-- no markdown
-"""
-
-    raw = call_llm(prompt)
-    # strip markdown garbage
-    if "```" in raw:
-        parts = raw.split("```")
-        for p in parts:
-            if "def " in p:
-                new_code = p
-                break
-
-    # strip leading labels like "MODIFIED CODE:"
-    lines = raw.splitlines()
-    for i, l in enumerate(lines):
-        if l.strip().startswith("def "):
-            raw = "\n".join(lines[i:])
-            break
-
-    if not raw:
-        return {"success": False, "error": "LLM empty"}
-
-    # -------- CLEAN LLM OUTPUT --------
-
-    # remove markdown fences
-    raw = raw.replace("```python","").replace("```","").strip()
-
-    # extract first real function
-    m = re.search(r"(def\s+" + re.escape(func_name) + r"\s*\(.*)", raw, re.S)
-    if not m:
-        return {"success": False, "error": "LLM no function found"}
-
-    new_code = m.group(1).rstrip()
-
-    # -------- PATCH FILE --------
+    blocks = parse_search_replace(raw_output)
+    if not blocks:
+        return {
+            "success": False, 
+            "error": f"LLM failed to output valid SEARCH/REPLACE blocks. RAW OUTPUT: {raw_output}"
+        }
 
     full_path = Path(state.repo_root) / file_path
+    if not full_path.exists():
+        return {"success": False, "error": f"File not found: {file_path}"}
 
-    try:
-        lines = full_path.read_text(encoding="utf-8").splitlines()
+    file_text = full_path.read_text(encoding="utf-8")
 
-        start = slice_data["start"] - 1
-        end = slice_data["end"]
+    # Apply all patches
+    for search_block, replace_block in blocks:
+        patched_text = apply_patch(file_text, search_block, replace_block)
+        if patched_text is None:
+            return {
+                "success": False,
+                "error": "SEARCH block did not exactly match the file content. LLM hallucinated code."
+            }
+        file_text = patched_text
 
-        updated = lines[:start] + new_code.splitlines() + lines[end:]
+    # Write patched code back to disk
+    full_path.write_text(file_text, encoding="utf-8")
 
-        full_path.write_text("\n".join(updated) + "\n", encoding="utf-8")
+    return {
+        "success": True,
+        "file": file_path,
+        "message": f"Successfully applied {len(blocks)} patch(es)."
+    }
 
-        return {"success": True}
 
-    except Exception as e:
-        return {"success": False, "error": str(e)}
 def run_agent(state):
 
     func_name, loc = _detect_function_from_goal(state.goal, state.repo_root)
@@ -115,33 +109,27 @@ def run_agent(state):
 
         action = None
 
-        # ---------- READ FIRST ----------
-        if not state.files_read:
+        # ---------- HEURISTICS (Try to fast-track obvious actions) ----------
+        if not state.files_read and loc and "file" in loc:
+            action = {"action": "read_file", "path": loc["file"]}
 
-            if loc and "file" in loc:
-                action = {"action": "read_file", "path": loc["file"]}
-
-            else:
-                hits = search_repo(state.repo_root, state.goal)
-                if hits:
-                    action = {"action": "read_file", "path": hits[0]}
-
-        # ---------- FUNCTION REWRITE ----------
-        elif func_name and loc and "file" in loc:
-
+        elif func_name and loc and "file" in loc and state.files_read:
+            # Only auto-rewrite if we have already read a file to get context
             action = {
                 "action": "rewrite_function",
                 "function": func_name,
                 "file": loc["file"]
             }
 
-        # ---------- FALLBACK ----------
-        else:
+        # ---------- FALLBACK TO LLM ----------
+        # If heuristics didn't trigger, or failed, LET THE LLM DECIDE
+        if not action:
             action = decide_next_action(state) or {}
 
         print("DEBUG ACTION:", action)
 
-        if not isinstance(action, dict):
+        if not isinstance(action, dict) or "action" not in action:
+            print("FATAL: Invalid action dict. Ending loop.")
             state.done = True
             continue
 

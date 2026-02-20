@@ -1,105 +1,50 @@
-# agent/decide.py
-from agent.llm import call_llm
 import json
-import re
-
-
-def _extract_json(text: str):
-    try:
-        return json.loads(text)
-    except Exception:
-        m = re.search(r'\{.*\}', text, re.DOTALL)
-        if m:
-            try:
-                return json.loads(m.group(0))
-            except Exception:
-                return None
-    return None
-
+from agent.llm import call_llm
 
 def decide_next_action(state) -> dict:
-    """
-    Decide the next action. If the agent has a function_context observation
-    (a function slice), ask the LLM to *generate* a replacement for that
-    function and return JSON with replace_range + content.
-    Otherwise fall back to a generic planning prompt.
-    """
+    # --- MEMORY COMPRESSION ---
+    # Only keep the last 2 observations to save VRAM context
+    recent_obs = state.observations[-2:] if state.observations else []
+    unique_read = list(set(state.files_read))
+    unique_mod = list(set(state.files_modified))
 
-    # Look for the most recent function context (set by the loop)
-    func_ctx = None
-    for obs in reversed(getattr(state, "observations", [])):
-        if isinstance(obs, dict) and obs.get("function_context"):
-            func_ctx = obs.get("function_context")
-            break
-
-    if func_ctx:
-        # function slice present — ask the model to produce code for that function only
-        file_rel = func_ctx.get("file")
-        start = int(func_ctx.get("start", 0))
-        end = int(func_ctx.get("end", 0))
-        slice_code = func_ctx.get("code", "").strip()
-
-        prompt = f"""
-You are Operon, a code-editing assistant. The user goal: {state.goal}
-
-You were given the following function slice from the repository file "{file_rel}" (lines {start}-{end}):
-
-------
-{slice_code}
-------
-
-Task: produce a corrected/updated implementation of *that function only*.
-Requirements:
-- Return a JSON object only (no prose).
-- JSON must contain:
-  - action: "write_file"
-  - path: the relative path to the file (e.g. "{file_rel}")
-  - replace_range: {{ "start": {start}, "end": {end} }}
-  - mode: "replace"
-  - content: the exact source code for the new function (function def + body). Must be valid Python and nothing else.
-- Do NOT include any explanation, comments, or surrounding file text. Only the function source in "content".
-- Preserve behavior unless the goal explicitly asks to change behavior.
-
-Return JSON only.
-"""
-        output = call_llm(prompt)
-
-        data = _extract_json(output)
-        if data:
-            return data
-        # fallthrough if model didn't return JSON
-
-    # General fallback prompt (no function context)
-    prompt = f"""
-You are controlling an execution agent.
-
+    prompt = f'''
 Goal: {state.goal}
 Plan: {state.plan}
-Files read: {state.files_read}
-Files modified: {state.files_modified}
-Last action: {state.last_action}
 
-Decide the next action.
+Context Summary:
+- Files read: {unique_read}
+- Files modified: {unique_mod}
+- Last action: {state.last_action}
 
-Available actions:
-- read_file(path)
-- write_file(path, content)  # append by default unless mode=='overwrite'
-- write_file(path, content, replace_range={{start,end}})  # replace lines start..end (inclusive)
-- run_tests()
-- git_commit(message)
-- stop()
+Recent Observations:
+{recent_obs}
 
-Return JSON only.
-"""
+Decide the next logical action to progress towards the goal.
 
-    output = call_llm(prompt)
-    data = _extract_json(output)
-    if data:
+AVAILABLE ACTIONS (Choose ONE):
+1. Read a file to understand it:
+   {{"action": "read_file", "path": "path/to/file.py"}}
+2. Rewrite a specific function (if you know what to change):
+   {{"action": "rewrite_function", "file": "path/to/file.py", "function": "function_name"}}
+3. Run tests:
+   {{"action": "run_tests"}}
+4. Stop execution if goal is met:
+   {{"action": "stop"}}
+
+You must return ONLY a raw JSON object. Do not include markdown formatting or explanations.
+'''
+
+    # Call LLM with native JSON enforcement
+    raw_output = call_llm(prompt, require_json=True)
+    
+    print("\n[LLM RAW OUTPUT]:\n", raw_output, "\n")
+    
+    try:
+        # It should parse perfectly every time now
+        data = json.loads(raw_output)
         return data
-
-    # safe fallback
-    return {
-        "action": "stop",
-        "error": "Failed to parse LLM JSON output",
-        "raw_output": output
-    }
+    except Exception as e:
+        print(f"[JSON PARSE ERROR]: {str(e)}")
+        # Emergency fallback so the loop doesn't crash
+        return {"action": "stop", "error": f"Failed to parse LLM JSON: {raw_output}"}
