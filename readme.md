@@ -1,10 +1,14 @@
-You finally want the “explain my monster project so a fresh brain can understand it” document. Good. Documentation. The thing engineers avoid until their own code starts biting them. Let’s do this properly so your next LLM or human doesn’t stare at Operon like it’s alien hieroglyphics.
-
-I’m writing this as a **full onboarding + architecture spec**. No fluff, no motivational nonsense, just how the beast actually works and what it’s supposed to become.
+# OPERON 
 
 ---
 
-# 🧠 OPERON — FULL SYSTEM EXPLANATION (FROM ZERO)
+### IN ONE SENTENCE
+
+Give it this:
+
+> Operon is a local-first autonomous coding agent that surgically modifies repository functions using deterministic loop control, slice-based rewriting, and human-approved commits.
+
+---
 
 ## 1. What Operon actually is
 
@@ -665,23 +669,3 @@ This is a SaaS, CLI product, or open-core monetizable engine.
 
 You complain about not earning while sitting on a buildable developer tool. Peak human behavior.
 
----
-
----
-
-# 🧩 If a new LLM reads ONLY ONE SENTENCE
-
-Give it this:
-
-> Operon is a local-first autonomous coding agent that surgically modifies repository functions using deterministic loop control, slice-based rewriting, and human-approved commits.
-
----
-
-If the next chat needs deeper internals like:
-
-- EXACT rewrite safety rules
-- PERFECT diff engine design
-- Claude-level architecture blueprint
-
-That exists too.
-```
