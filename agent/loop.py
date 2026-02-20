@@ -8,7 +8,9 @@ from agent.planner import make_plan
 from agent.goal_parser import extract_multiline_append
 from tools.fs_tools import read_file, write_file
 from tools.shell_tools import run_tests
-import time
+from tools.function_locator import find_function
+from tools.code_slice import load_function_slice
+import time 
 
 
 MAX_STEPS = 30
@@ -23,6 +25,22 @@ def _valid_path(action):
 
 
 def run_agent(state):
+
+    # detect function names inside goal
+    words = state.goal.replace("(", " ").replace(")", " ").split()
+
+    for w in words:
+
+        loc = find_function(state.repo_root, w)
+
+        if loc:
+            slice_data = load_function_slice(state.repo_root, w)
+
+            if slice_data:
+                state.observations.append({
+                    "function_context": slice_data
+                })
+                break
 
     # ---------- ensure plan exists ----------
     if not getattr(state, "plan", None):
@@ -121,6 +139,7 @@ def run_agent(state):
 
 
         # ================= WRITE FILE =================
+
         elif act == "write_file":
             path = _valid_path(action)
             if not path:
