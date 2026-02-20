@@ -30,23 +30,39 @@ def _rewrite_function(state, func_name, slice_data, file_path):
     current_code = slice_data["code"]
 
     prompt = f"""
-Rewrite this Python function.
+You are modifying an EXISTING Python function.
 
 GOAL:
 {state.goal}
 
-FUNCTION:
+CURRENT FUNCTION:
 {current_code}
 
-STRICT RULES:
-Return ONLY the full python function.
-No markdown.
-No explanation.
-Must start with: def {func_name}
-Do not rename parameters.
+CRITICAL RULES:
+- preserve ALL existing code
+- do NOT delete any lines
+- do NOT rename variables
+- keep indentation identical
+- only insert minimal changes
+- return FULL function only
+- no markdown
 """
 
     raw = call_llm(prompt)
+    # strip markdown garbage
+    if "```" in raw:
+        parts = raw.split("```")
+        for p in parts:
+            if "def " in p:
+                new_code = p
+                break
+
+    # strip leading labels like "MODIFIED CODE:"
+    lines = raw.splitlines()
+    for i, l in enumerate(lines):
+        if l.strip().startswith("def "):
+            raw = "\n".join(lines[i:])
+            break
 
     if not raw:
         return {"success": False, "error": "LLM empty"}

@@ -6,7 +6,7 @@ if __name__ == "__main__":
         goal="""
 Modify the write_file function in tools/fs_tools.py so that:
 
-Add a print("WRITE CALLED") at start of write_file function.
+Add print("HELLO") inside write_file function
 - Do NOT change existing functionality.
 """,
         repo_root="/home/UserX/Master/Operon"
