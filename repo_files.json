@@ -42,7 +42,7 @@
     ]
   },
   "tools/fs_tools.py": {
-    "summary": "Just one simple sentence describing the purpose of the file.\n\n:",
+    "summary": "Provides functions read_file, write_file and classes .",
     "functions": [
       {
         "name": "read_file",
@@ -52,7 +52,7 @@
       {
         "name": "write_file",
         "start": 13,
-        "end": 46
+        "end": 39
       }
     ],
     "classes": [],
@@ -77,7 +77,7 @@
     ]
   },
   "tools/git_tools.py": {
-    "summary": "Provides functions _run, _current_branch, _slugify, smart_commit_pipeline and classes .",
+    "summary": "Just one simple sentence.\n\n:",
     "functions": [
       {
         "name": "_run",
@@ -291,12 +291,12 @@
       {
         "name": "_rewrite_function",
         "start": 25,
-        "end": 83
+        "end": 99
       },
       {
         "name": "run_agent",
-        "start": 84,
-        "end": 199
+        "start": 100,
+        "end": 215
       }
     ],
     "classes": [],
@@ -318,7 +318,7 @@
     ]
   },
   "agent/llm.py": {
-    "summary": "Provides functions call_llm and classes .",
+    "summary": "Just one simple sentence.\n\n:",
     "functions": [
       {
         "name": "call_llm",
@@ -346,7 +346,7 @@
     ]
   },
   "runtime/state.py": {
-    "summary": "Just a simple explanation.\n\nThis file defines a data class named AgentState that tracks the state of an AI worker, including its goal, repository root, plan, files read and modified, last action, observations, errors, step count, and whether it's done.\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\ns\n\n\ns",
+    "summary": "Provides functions  and classes AgentState.",
     "functions": [],
     "classes": [
       {
