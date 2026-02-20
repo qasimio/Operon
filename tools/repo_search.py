@@ -1,7 +1,6 @@
 import json
 from pathlib import Path
 
-
 def search_repo(repo_root, query):
 
     repo = Path(repo_root)
