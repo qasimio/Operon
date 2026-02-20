@@ -5,7 +5,7 @@
 
 ### IN ONE SENTENCE
 
-Give it this:
+##### Give it this:
 
 > Operon is a local-first autonomous coding agent that surgically modifies repository functions using deterministic loop control, slice-based rewriting, and human-approved commits.
 
