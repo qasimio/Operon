@@ -11,7 +11,6 @@ def read_file(path: str, repo_root: str) -> Dict:
         return {"success": False, "path": path, "error": str(e)}
 
 def write_file(path: str, content: str, repo_root: str, mode: str = "append") -> Dict:
-    print("WRITE CALLED")
     """
     Write to a file inside repo_root.
 
@@ -21,6 +20,7 @@ def write_file(path: str, content: str, repo_root: str, mode: str = "append") ->
     """
     full_path = Path(repo_root) / path
     try:
+        print("WRITE CALLED")
         full_path.parent.mkdir(parents=True, exist_ok=True)
 
         if mode not in ("append", "overwrite"):
@@ -40,8 +40,7 @@ def write_file(path: str, content: str, repo_root: str, mode: str = "append") ->
 
 
         else:  # overwrite
-            full_path.write_text(content, encoding="utf-8")
-
+            full_path.write_text(content, encoding="utf-
 
 """
 Try to read a file inside a repo. If it works, return the text and size. If it fails, return the error instead of crashing.
