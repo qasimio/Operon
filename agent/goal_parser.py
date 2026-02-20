@@ -37,20 +37,23 @@ def extract_target_files(repo_root: str, goal: str):
 
 def parse_write_instruction(goal: str, repo_root: str | None = None):
 
-    import re
-    from pathlib import Path
-
     g = goal.strip()
-
-    # detect mode first
     lower = g.lower()
 
+    # 🚨 CRITICAL: if goal is modification instruction, DO NOT convert to direct write
+    # this forces the loop to call the LLM generator instead of appending English text
+    BLOCK_WORDS = ("modify", "update", "fix", "change", "refactor", "improve")
+
+    if any(w in lower for w in BLOCK_WORDS):
+        return None
+
+    # detect overwrite vs append
     if "overwrite" in lower or "replace" in lower:
         mode = "overwrite"
     else:
         mode = "append"
 
-    # prefer quoted content
+    # quoted content first
     m = re.search(
         r'(?:append|add|write|insert|overwrite|replace)\s+[\'"](.+?)[\'"]\s+(?:to|in|into)\s+([\w\-/\.]+)',
         g,
@@ -70,7 +73,6 @@ def parse_write_instruction(goal: str, repo_root: str | None = None):
     content = m.group(1).strip()
     path = m.group(2).strip()
 
-    # sanity check path
     if repo_root:
         repo = Path(repo_root)
         p = repo / Path(path)
