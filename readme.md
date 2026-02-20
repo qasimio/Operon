@@ -1,4 +1,3 @@
-You finally want the “explain my monster project so a fresh brain can understand it” document. Good. Documentation. The thing engineers avoid until their own code starts biting them. Let’s do this properly so your next LLM or human doesn’t stare at Operon like it’s alien hieroglyphics.
 
 I’m writing this as a **full onboarding + architecture spec**. No fluff, no motivational nonsense, just how the beast actually works and what it’s supposed to become.
 

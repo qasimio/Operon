@@ -1,6 +1,6 @@
 {
   "main.py": {
-    "summary": "Provides functions  and classes .",
+    "summary": "Just a single sentence describing the purpose of the script.\n\n:\n\n\n\n\n\n\n\n\n\n\n\ns\n\n\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns",
     "functions": [],
     "classes": [],
     "imports": [
@@ -12,7 +12,9 @@
     "summary": "Provides functions  and classes .",
     "functions": [],
     "classes": [],
-    "imports": []
+    "imports": [
+      "C"
+    ]
   },
   "repo_tree.json": {
     "summary": "Provides functions  and classes .",
@@ -42,7 +44,7 @@
     ]
   },
   "tools/fs_tools.py": {
-    "summary": "Provides functions read_file, write_file and classes .",
+    "summary": "Just a simple statement describing the purpose of the file.\n\n:",
     "functions": [
       {
         "name": "read_file",
@@ -52,7 +54,7 @@
       {
         "name": "write_file",
         "start": 13,
-        "end": 39
+        "end": 41
       }
     ],
     "classes": [],
@@ -318,7 +320,7 @@
     ]
   },
   "agent/llm.py": {
-    "summary": "Just one simple sentence.\n\n:",
+    "summary": "Provides functions call_llm and classes .",
     "functions": [
       {
         "name": "call_llm",
