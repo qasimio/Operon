@@ -21,6 +21,5 @@
   "tools/git_tools.py",
   "tools/repo_brain.py",
   "tools/repo_search.py",
-  "tools/shell_tools.py",
-  "tools/tempCodeRunnerFile.py"
+  "tools/shell_tools.py"
 ]

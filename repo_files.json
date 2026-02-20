@@ -1,6 +1,6 @@
 {
   "main.py": {
-    "summary": "```\n\n```python\nfrom runtime.state import AgentState\nfrom agent.loop import run_agent\n\nif __name__ == \"__main__\":\n    state = AgentState(\n        goal=\"\"\"Overwrite the following code EXACTLY as written (keep structure unchanged) \nto the end of file logs/test.py:\n\nfrom tools.repo_brain import build_repo_brain\nfrom agent.llm import call_llm\n\nbuild_repo_brain(\"/home/UserX/Master/Operon/\", call_llm)\n\n# write summary of tools/repo_brain.py as a comment in\n\n# this comment is added by Operon from MQ\n\"\"\",\n        repo_root=\"/home/UserX/Master/Operon\"\n    )\n\n    final_state = run_agent(state)\n\n    print(\"DONE\")\n    print(final_state)\n```\n\n```python\nfrom runtime.state import AgentState\nfrom agent.loop import run_agent\n\nif __name__ == \"__main__\":\n    state = AgentState(\n        goal=\"\"\"Overwrite the following code EXACTLY as written (keep structure unchanged) \nto the end of file logs/test.py:\n\nfrom tools.repo_brain import build_repo_brain\nfrom agent.llm import call_llm\n\nbuild_repo_brain(\"/home/UserX/Master/Operon/\", call_ll",
+    "summary": "Provides functions  and classes .",
     "functions": [],
     "classes": [],
     "imports": [
@@ -11,34 +11,28 @@
     ]
   },
   "readme.md": {
-    "summary": "we have a new feature called \"auto-complete\" that allows users to input partial text and receive suggestions for completions. this feature enhances user experience by reducing typing errors and speeding up content creation.\nthe auto-complete feature can be toggled on or off in the settings menu, allowing users to customize their experience according to their needs.\n\nSUMMARY:\nThis README file introduces a new feature called \"auto-complete\" for Qwen2.5, highlighting its benefits of reducing typing errors and speeding up content creation. Users can toggle this feature on or off in the settings menu.\n:\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\ns\n\n\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns",
+    "summary": "Provides functions  and classes .",
     "functions": [],
     "classes": [],
     "imports": []
   },
   "repo_tree.json": {
-    "summary": "This file, `repo_tree.json`, is a JSON array representing the directory structure of a repository. It contains strings that are filenames and directories within the repository, providing a hierarchical view of all files and subdirectories starting from the root level.",
+    "summary": "Provides functions  and classes .",
     "functions": [],
     "classes": [],
     "imports": []
   },
   "repo_files.json": {
-    "summary": "```\n\n\n\n\n\n\n\ns\n```",
+    "summary": "Provides functions  and classes .",
     "functions": [],
     "classes": [],
     "imports": [
-      "_run",
-      "create_branch",
-      "json",
-      "re",
-      "argparse",
-      "re",
-      "Path",
-      "sys"
+      "dataclass",
+      "List"
     ]
   },
   "tools/fs_tools.py": {
-    "summary": "def read_repo_file(repo_root: str, path: str) -> Dict:\n    full_path = Path(repo_root) / path\n    try:\n        text = full_path.read_text(encoding=\"utf-8\", errors=\"ignore\")\n        return {\"success\": True, \"path\": path, \"content\": text, \"length\": len(text)}\n    except Exception as e:\n        return {\"success\": False, \"path\": path, \"error\": str(e)}\n\n\"\"\"\nTry to write a file inside a repo. If it works, return the number of bytes written. If it fails, return the error instead of crashing.\n\"\"\"\ndef write_repo_file(repo_root: str, path: str, content: str, mode: str = \"append\") -> Dict:\n    full_path = Path(repo_root) / path\n    try:\n        full_path.parent.mkdir(parents=True, exist_ok=True)\n\n        if mode not in (\"append\", \"overwrite\"):\n            return {\"success\": False, \"path\": path, \"error\": f\"invalid mode: {mode}\"}\n\n        if mode == \"append\":\n            with open(full_path, \"a\", encoding=\"utf-8\") as f:\n                # ensure newline before append\n                if full_path.exists():\n                    with",
+    "summary": "Just one simple sentence.\n\nThis Python script provides functions to read from and write to files within a repository, handling errors gracefully and returning detailed results about each operation.",
     "functions": [
       {
         "name": "read_file",
@@ -58,7 +52,7 @@
     ]
   },
   "tools/shell_tools.py": {
-    "summary": "def get_repo_root() -> str:\n    \"\"\"\n    Get the root directory of a git repository.\n    \"\"\"\n    try:\n        result = subprocess.run(\n            [\"git\", \"rev-parse\", \"--show-toplevel\"],\n            capture_output=True,\n            text=True\n        )\n        if result.returncode == 0:\n            return result.stdout.strip()\n        else:\n            raise Exception(\"Failed to get repo root\")\n    except FileNotFoundError as e:\n        return {\"success\": False, \"error\": f\"Command not found: {str(e)}\"}\n    except Exception as e:\n        return {\"success\": False, \"error\": str(e)}\n\ndef run_shell_command(command: str) -> Dict:\n    \"\"\"\n    Run a shell command and capture its output.\n    \"\"\"\n    try:\n        result = subprocess.run(\n            command.split(),\n            capture_output=True,\n            text=True\n        )\n        return {\n            \"success\": result.returncode == 0,\n            \"stdout\": result.stdout,\n            \"stderr\": result.stderr,\n            \"returncode\": result.returncode\n        }\n    except FileNotFoundError as e:\n        return {\"success\": False, \"error\": f\"Command not found: {str(e)}\"}\n    except Exception as e:\n        return {\"success\": False",
+    "summary": "Provides functions run_tests and classes .",
     "functions": [
       {
         "name": "run_tests",
@@ -73,7 +67,7 @@
     ]
   },
   "tools/git_tools.py": {
-    "summary": "def main():\n    import argparse\n    parser = argparse.ArgumentParser(description=\"Git tools for automation\")\n    subparsers = parser.add_subparsers(title='commands', dest='command')\n\n    run_parser = subparsers.add_parser('run_git')\n    run_parser.add_argument('cmd', nargs='+', help='git command to run')\n    run_parser.set_defaults(func=_run)\n\n    create_branch_parser = subparsers.add_parser('create_branch')\n    create_branch_parser.add_argument('repo_root', help='path to git repo root')\n    create_branch_parser.set_defaults(func=lambda args: _current_branch(args.repo_root))\n\n    commit_parser = subparsers.add_parser('commit')\n    commit_parser.add_argument('goal', help='commit message goal')\n    commit_parser.add_argument('repo_root', help='path to git repo root')\n    commit_parser.set_defaults(func=smart_commit_pipeline)\n\n    args = parser.parse_args()\n    args.func(args)\n\n\nif __name__ == \"__main__\":\n    main()\n\nSUMMARY:\nThe file `git_tools.py` is a Python script that provides functions for running Git commands, creating branches, and committing changes. It includes a command-line interface to execute these operations based on user input.\n\"\"\"",
+    "summary": "Provides functions _run, _current_branch, _slugify, smart_commit_pipeline and classes .",
     "functions": [
       {
         "name": "_run",
@@ -102,14 +96,8 @@
       "re"
     ]
   },
-  "tools/tempCodeRunnerFile.py": {
-    "summary": "```python\ndef build_repo_b():\n    print(\"Building repository B\")\n```\n\nmain\n```python\nif __name__ == \"__main__\":\n    build_repo_b()\n```\n```\n\nSUMMARY:\n\nThe file `tempCodeRunnerFile.py` contains two functions: `build_repo_b()` which prints \"Building repository B\", and the main function that calls `build_repo_b()` when the script is executed directly.",
-    "functions": [],
-    "classes": [],
-    "imports": []
-  },
   "tools/build_brain.py": {
-    "summary": "```\ntools/repo_brain.py:\n\nimport os\nfrom agent.llm import call_llm\n\ndef build_repo_brain(repo_path, llm_function):\n    # Check if the repository path exists\n    if not os.path.exists(repo_path):\n        raise ValueError(f\"Repository path {repo_path} does not exist.\")\n    \n    # Iterate through each file in the repository\n    for root, dirs, files in os.walk(repo_path):\n        for file in files:\n            file_path = os.path.join(root, file)\n            \n            # Call the LLM function to process the file\n            llm_function(file_path)\n\n```\n\n```\n\n\n# write summary of agent/llm.py as a comment in\n\n# this comment is added by Operon from MQ\n\n```\nagent/llm.py:\n\nimport openai\n\ndef call_llm(file_path):\n    # Load the OpenAI API key from environment variables\n    api_key = os.getenv(\"OPENAI_API_KEY\")\n    \n    if not api_key:\n        raise ValueError(\"OpenAI API key is missing.\")\n    \n    # Initialize the OpenAI client with the provided API key\n    openai.api_key = api_key\n    \n    # Read the content of the file\n    with open(file_path, \"",
+    "summary": "Provides functions  and classes .",
     "functions": [],
     "classes": [],
     "imports": [
@@ -118,7 +106,7 @@
     ]
   },
   "tools/repo_search.py": {
-    "summary": "```\n\n`repo_search.py` is a Python script that searches for files within a repository based on a query. It reads the `repo_files.json` file, which contains information about each file in the repository, and returns up to five files that match the query. The search is case-insensitive and considers various attributes of each file, including its name, summary, functions, classes, and imports.",
+    "summary": "Just a simple explanation.\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\ns",
     "functions": [
       {
         "name": "search_repo",
@@ -133,7 +121,7 @@
     ]
   },
   "tools/repo_brain.py": {
-    "summary": "```\n\nFILE DESCRIPTION:\nrepo_brain.py is a Python script that builds a representation of a repository's structure and content. It ignores certain directories and files during the process. The script extracts information from Python files, including function names, class names, and import statements. It also generates summaries for each file using an external language model (LLM). The extracted data is saved in JSON format along with a tree representation of the repository's directory structure.\n\nThe script uses regular expressions to parse Python code and abstract syntax trees (AST) to extract more detailed information about functions and classes. It handles exceptions gracefully, ensuring that files with parsing errors are skipped. The final output includes summaries for each file, function details, class details, and import statements, providing a comprehensive overview of the repository's content.\n\nThe script is designed to be used in conjunction with an external LLM to generate human-readable summaries of Python code within a repository. This can be useful for documentation generation, code review, or other purposes where understanding the structure and content of a repository is important.",
+    "summary": "Provides functions build_tree, extract_python_info, build_repo_brain, extract_python_structure_ast, Visitor.visit_FunctionDef and classes Visitor.",
     "functions": [
       {
         "name": "build_tree",
@@ -147,50 +135,50 @@
       },
       {
         "name": "build_repo_brain",
-        "start": 37,
-        "end": 98
+        "start": 36,
+        "end": 119
       },
       {
         "name": "extract_python_structure_ast",
-        "start": 100,
-        "end": 150
+        "start": 121,
+        "end": 171
       },
       {
         "name": "Visitor.visit_FunctionDef",
-        "start": 114,
-        "end": 120
+        "start": 135,
+        "end": 141
       },
       {
         "name": "Visitor.visit_AsyncFunctionDef",
-        "start": 122,
-        "end": 128
+        "start": 143,
+        "end": 149
       },
       {
         "name": "Visitor.visit_ClassDef",
-        "start": 130,
-        "end": 146
+        "start": 151,
+        "end": 167
       },
       {
         "name": "visit_FunctionDef",
-        "start": 114,
-        "end": 120
+        "start": 135,
+        "end": 141
       },
       {
         "name": "visit_AsyncFunctionDef",
-        "start": 122,
-        "end": 128
+        "start": 143,
+        "end": 149
       },
       {
         "name": "visit_ClassDef",
-        "start": 130,
-        "end": 146
+        "start": 151,
+        "end": 167
       }
     ],
     "classes": [
       {
         "name": "Visitor",
-        "start": 112,
-        "end": 146
+        "start": 133,
+        "end": 167
       }
     ],
     "imports": [
@@ -201,7 +189,7 @@
     ]
   },
   "agent/tool_jail.py": {
-    "summary": "```\n\nFILE: tool_jail.py\n\nCONTENT:\n\nimport json\nimport re\n\nALLOWED_ACTIONS = {\n    \"read_file\": [\"path\"],\n    \"write_file\": [\"path\", \"content\"],\n    \"run_tests\": [],\n    \"git_commit\": [\"message\"],\n    \"stop\": []\n}\n\n\ndef _extract_json(text: str):\n    \"\"\"Pull first JSON object from model output.\"\"\"\n    try:\n        return json.loads(text)\n    except:\n        m = re.search(r\"\\{.*\\}\", text, re.DOTALL)\n        if m:\n            try:\n                return json.loads(m.group(0))\n            except:\n                return None\n    return None\n\n\ndef validate_action(raw_output: str):\n    \"\"\"\n    Return (valid_dict, error_string)\n    \"\"\"\n\n    data = _extract_json(raw_output)\n\n    if not data:\n        return None, \"no_json\"\n\n    action = data.get(\"action\")\n\n    if action not in ALLOWED_ACTIONS:\n        return None, f\"invalid_action:{action}\"\n\n    required = ALLOWED_ACTIONS[action]\n\n    for field in required:\n        if field not in data:\n            return None, f\"missing_field:{field}\"\n\n    return data, None\n\n```",
+    "summary": "Provides functions _extract_json, validate_action and classes .",
     "functions": [
       {
         "name": "_extract_json",
@@ -221,7 +209,7 @@
     ]
   },
   "agent/decide.py": {
-    "summary": "```\n\n:\n\n\n\n\n\n\n\n\n\n\n\ns",
+    "summary": "Just one simple sentence.\n\n:\n\n\n\n\n\ns",
     "functions": [
       {
         "name": "decide_next_action",
@@ -236,7 +224,7 @@
     ]
   },
   "agent/planner.py": {
-    "summary": "```\n\n`",
+    "summary": "Provides functions make_plan and classes .",
     "functions": [
       {
         "name": "make_plan",
@@ -251,7 +239,7 @@
     ]
   },
   "agent/approval.py": {
-    "summary": "def main():\n    action = \"update\"\n    payload = {\"user\": \"john_doe\", \"role\": \"admin\"}\n    approval_result = ask_user_approval(action, payload)\n    print(\"Approval Result:\", approval_result)\n\nif __name__ == \"__main__\":\n    main()\n``\nThe `approval.py` file contains a function `ask_user_approval` that prompts the user to approve or deny an action with associated payload. The function prints the details of the action and payload, then waits for user input ('y' or 'n') to return a boolean indicating approval status. The `main` function demonstrates how to use this function by requesting approval for updating a user's role.",
+    "summary": "Provides functions ask_user_approval and classes .",
     "functions": [
       {
         "name": "ask_user_approval",
@@ -263,7 +251,7 @@
     "imports": []
   },
   "agent/goal_parser.py": {
-    "summary": "def parse_goal(goal: str, repo_root: str | None = None) -> dict:\n\n    \"\"\"\n    Parse a goal string and return a dictionary with the parsed information.\n    \"\"\"\n\n    import re\n\n    g = goal.strip()\n\n    # detect mode first\n    lower = g.lower()\n\n    if \"overwrite\" in lower or \"replace\" in lower:\n        mode = \"overwrite\"\n    else:\n        mode = \"append\"\n\n    # prefer quoted content\n    m = re.search(\n        r'(?:append|add|write|insert|overwrite|replace)\\s+[\\'\"](.+?)[\\'\"]\\s+(?:to|in|into)\\s+([\\w\\-/\\.]+)',\n        g,\n        flags=re.IGNORECASE\n    )\n\n    if not m:\n        m = re.search(\n            r'(?:append|add|write|insert|overwrite|replace)\\s+(.+?)\\s+(?:to|in|into)\\s+([\\w\\-/\\.]+)',\n            g,\n            flags=re.IGNORECASE\n        )\n\n    if not m:\n        return None\n\n    content = m.group(1).strip()\n    path = m.group(2).strip()\n\n    # sanity check path\n    if repo_root",
+    "summary": "Just a plain explanation.\n\n:\n\n\n\n\n\n\n\ns",
     "functions": [
       {
         "name": "_looks_like_file",
@@ -296,7 +284,7 @@
     ]
   },
   "agent/loop.py": {
-    "summary": "```",
+    "summary": "Provides functions _valid_path, run_agent and classes .",
     "functions": [
       {
         "name": "_valid_path",
@@ -325,7 +313,7 @@
     ]
   },
   "agent/llm.py": {
-    "summary": "```",
+    "summary": "Provides functions call_llm and classes .",
     "functions": [
       {
         "name": "call_llm",
@@ -339,7 +327,7 @@
     ]
   },
   "agent/repo.py": {
-    "summary": "def list_repo_files(repo_root: str, pattern: str = \"*.py\") -> list[str]:\n    root = Path(repo_root)\n    matching_files = []\n\n    for p in root.rglob(pattern):\n        if \".git\" not in str(p):\n            matching_files.append(str(p.relative_to(root)))\n\n    return matching_files\n\ndef find_repo_file(repo_root: str, filename: str) -> str | None:\n    root = Path(repo_root)\n\n    for p in root.rglob(filename):\n        if \".git\" not in str(p):\n            return str(p.relative_to(root))\n\n    return None\n```\n\nFILE DESCRIPTION:\n\nThis Python script defines functions to interact with a repository. It includes functionality to build a summary of files, list files matching a pattern, and find the location of a specific file within the repository.\n\nThe `build_repo_summary` function generates a string listing up to `max_files` (default 15) non-hidden files in the repository root directory and its subdirectories, excluding those under `.git`.\n\nThe `list_repo_files` function returns a list of paths for all files matching a specified pattern (default \"*.py\") within the repository, again excluding hidden files and directories.\n\nThe `find_repo_file` function searches for a file by name",
+    "summary": "Provides functions build_repo_summary and classes .",
     "functions": [
       {
         "name": "build_repo_summary",
@@ -353,7 +341,7 @@
     ]
   },
   "runtime/state.py": {
-    "summary": "```\n\n\n\n\n\n\n\n\n\n\n\n\ns",
+    "summary": "Provides functions  and classes AgentState.",
     "functions": [],
     "classes": [
       {
