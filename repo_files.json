@@ -9,7 +9,7 @@
     ]
   },
   "readme.md": {
-    "summary": "Provides functions  and classes .",
+    "summary": "Just a simple statement describing the content of the README.md file.\n\n't provide any actual content or details from the file itself. The response should be based solely on the information given in the instruction.",
     "functions": [],
     "classes": [],
     "imports": []
@@ -42,7 +42,7 @@
     ]
   },
   "tools/fs_tools.py": {
-    "summary": "Provides functions read_file, write_file and classes .",
+    "summary": "Just one simple sentence.\n\nThis Python script provides functions to read from and write to files within a repository root directory, handling errors gracefully and returning detailed results about the operations performed.",
     "functions": [
       {
         "name": "read_file",
@@ -77,7 +77,7 @@
     ]
   },
   "tools/git_tools.py": {
-    "summary": "Just one simple sentence.\n\n:",
+    "summary": "Just one simple sentence.\n\nThis Python script provides functions for running Git commands and automating common commit workflows based on the current branch and goal description.",
     "functions": [
       {
         "name": "_run",
@@ -107,7 +107,7 @@
     ]
   },
   "tools/build_brain.py": {
-    "summary": "Just one simple sentence.\n\nThis Python script builds a brain for a repository located at \"/home/UserX/Master/Operon/\" using the call_llm function to interact with an LLM (likely a language model).",
+    "summary": "Provides functions  and classes .",
     "functions": [],
     "classes": [],
     "imports": [
@@ -282,7 +282,7 @@
     "imports": []
   },
   "agent/goal_parser.py": {
-    "summary": "Just a simple explanation.\n\n:\n\n\n\n\n\n\n\n\n\n\n\n\ns",
+    "summary": "Just a simple explanation.\n\n:\n\n\n\n\n\n\n\n\n\n\n\ns\n\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns",
     "functions": [
       {
         "name": "_looks_like_file",
@@ -313,32 +313,32 @@
     ]
   },
   "agent/loop.py": {
-    "summary": "Just a single sentence describing the purpose of the script.\n\n:",
+    "summary": "Just a simple explanation.\n\n:",
     "functions": [
       {
         "name": "_valid_path",
-        "start": 22,
-        "end": 27
-      },
-      {
-        "name": "_is_instruction_text",
-        "start": 30,
-        "end": 45
-      },
-      {
-        "name": "_extract_code_from_llm",
-        "start": 48,
-        "end": 58
+        "start": 21,
+        "end": 25
       },
       {
         "name": "_latest_function_context",
-        "start": 61,
-        "end": 65
+        "start": 28,
+        "end": 32
+      },
+      {
+        "name": "_extract_code_from_llm",
+        "start": 35,
+        "end": 39
+      },
+      {
+        "name": "_safe_function_rewrite",
+        "start": 41,
+        "end": 64
       },
       {
         "name": "run_agent",
-        "start": 68,
-        "end": 326
+        "start": 66,
+        "end": 228
       }
     ],
     "classes": [],
@@ -357,13 +357,11 @@
       "call_llm",
       "Path",
       "re",
-      "time",
-      "smart_commit_pipeline",
-      "smart_commit_pipeline"
+      "time"
     ]
   },
   "agent/llm.py": {
-    "summary": "Just plain text.\n\n:",
+    "summary": "Provides functions call_llm and classes .",
     "functions": [
       {
         "name": "call_llm",
@@ -391,7 +389,7 @@
     ]
   },
   "runtime/state.py": {
-    "summary": "Provides functions  and classes AgentState.",
+    "summary": "Just a single sentence.\n\nThis Python script defines a data class named `AgentState` that tracks the state of an AI worker, including its goal, repository root, plan, files read and modified, last action, observations, errors, step count, and whether it's done.\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\ns",
     "functions": [],
     "classes": [
       {

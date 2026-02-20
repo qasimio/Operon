@@ -38,6 +38,30 @@ def _extract_code_from_llm(output: str) -> str:
         return m.group(1).rstrip() + "\n"
     return output.strip() + "\n"
 
+def _safe_function_rewrite(original_name: str, new_code: str):
+
+    if not new_code:
+        return False
+
+    txt = new_code.strip()
+
+    # reject markdown / explanation junk
+    if "```" in txt:
+        return False
+
+    # must contain same function name
+    if f"def {original_name}(" not in txt:
+        return False
+
+    # must look like python, not bullets
+    if txt.startswith("1.") or txt.startswith("-"):
+        return False
+
+    # must be reasonably long
+    if len(txt) < 40:
+        return False
+
+    return True
 
 def run_agent(state):
 
@@ -144,6 +168,13 @@ Return ONLY the full rewritten function.
 """
 
                 new_code = _extract_code_from_llm(call_llm(prompt))
+
+                func_name = action.get("function_name")
+
+                if not func_name or not _safe_function_rewrite(func_name, new_code):
+                    state.errors.append("LLM returned unsafe rewrite — aborting")
+                    state.done = True
+                    continue
 
                 full = Path(state.repo_root) / file_rel
                 text = full.read_text(encoding="utf-8", errors="ignore")
