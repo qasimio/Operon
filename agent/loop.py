@@ -23,80 +23,75 @@ def _detect_function_from_goal(goal, repo_root):
 
 
 def _rewrite_function(state, func_name, slice_data, file_path):
-
     from pathlib import Path
-    import re
-
+    from tools.diff_engine import parse_search_replace, apply_patch
+    
     current_code = slice_data["code"]
 
     prompt = f"""
-You are modifying an EXISTING Python function.
+You are Operon, a surgical code editor.
+GOAL: {state.goal}
 
-GOAL:
-{state.goal}
-
-CURRENT FUNCTION:
+CURRENT FUNCTION TO MODIFY:
+```python
 {current_code}
+INSTRUCTIONS:
+You must modify the code using a SEARCH/REPLACE block.
 
-CRITICAL RULES:
-- preserve ALL existing code
-- do NOT delete any lines
-- do NOT rename variables
-- keep indentation identical
-- only insert minimal changes
-- return FULL function only
-- no markdown
-"""
+    Find the exact lines you need to change.
 
-    raw = call_llm(prompt)
-    # strip markdown garbage
-    if "```" in raw:
-        parts = raw.split("```")
-        for p in parts:
-            if "def " in p:
-                new_code = p
-                break
+    Output a SEARCH block with the exact original lines.
 
-    # strip leading labels like "MODIFIED CODE:"
-    lines = raw.splitlines()
-    for i, l in enumerate(lines):
-        if l.strip().startswith("def "):
-            raw = "\n".join(lines[i:])
-            break
+    Output a REPLACE block with the new lines.
 
-    if not raw:
-        return {"success": False, "error": "LLM empty"}
+FORMAT: <<<<<<< SEARCH [exact original lines to replace]
 
-    # -------- CLEAN LLM OUTPUT --------
+[new modified lines]
 
-    # remove markdown fences
-    raw = raw.replace("```python","").replace("```","").strip()
+                            REPLACE
 
-    # extract first real function
-    m = re.search(r"(def\s+" + re.escape(func_name) + r"\s*\(.*)", raw, re.S)
-    if not m:
-        return {"success": False, "error": "LLM no function found"}
+RULES:
 
-    new_code = m.group(1).rstrip()
+    The SEARCH block must EXACTLY match the existing code character-for-character, including indentation.
 
-    # -------- PATCH FILE --------
+    Keep the changes as minimal as possible. Do not replace the whole function if you only need to change one line.
+    """
+
+    raw_output = call_llm(prompt, require_json=False)
+
+    blocks = parse_search_replace(raw_output)
+    if not blocks:
+        return {"success": False, "error": "LLM failed to output valid SEARCH/REPLACE blocks."}
 
     full_path = Path(state.repo_root) / file_path
+    if not full_path.exists():
+        return {"success": False, "error": f"File not found: {file_path}"}
 
-    try:
-        lines = full_path.read_text(encoding="utf-8").splitlines()
+    file_text = full_path.read_text(encoding="utf-8")
 
-        start = slice_data["start"] - 1
-        end = slice_data["end"]
+    # Apply all patches
 
-        updated = lines[:start] + new_code.splitlines() + lines[end:]
+    for search_block, replace_block in blocks:
+        patched_text = apply_patch(file_text, search_block, replace_block)
 
-        full_path.write_text("\n".join(updated) + "\n", encoding="utf-8")
+    if patched_text is None:
+        return {
+    "success": False,
+    "error": "SEARCH block did not exactly match the file content. LLM hallucinated code."
+    }
 
-        return {"success": True}
+    file_text = patched_text
 
-    except Exception as e:
-        return {"success": False, "error": str(e)}
+#    Write patched code back to disk
+
+    full_path.write_text(file_text, encoding="utf-8")
+
+    return {
+    "success": True,
+    "file": file_path,
+    "message": f"Successfully applied {len(blocks)} patch(es)."
+    }
+
 def run_agent(state):
 
     func_name, loc = _detect_function_from_goal(state.goal, state.repo_root)

@@ -71,7 +71,6 @@ Decide the next action.
 Available actions:
 - read_file(path)
 - write_file(path, content)  # append by default unless mode=='overwrite'
-- write_file(path, content, replace_range={{start,end}})  # replace lines start..end (inclusive)
 - run_tests()
 - git_commit(message)
 - stop()
