@@ -128,6 +128,9 @@ def run_agent(state):
         if not action:
             action = decide_next_action(state) or {}
 
+        log.info(f"Executing action: {action.get('action')}")
+        log.debug(f"Full state payload: {action}")
+
         print("DEBUG ACTION:", action)
 
         if not isinstance(action, dict) or "action" not in action:
