@@ -21,4 +21,4 @@ def search_repo(repo_root, query):
         if q in blob:
             hits.append(file)   # IMPORTANT: file already contains full repo path
 
-    return hits[:10]
+    return hits[:5]
