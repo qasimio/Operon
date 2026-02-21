@@ -44,7 +44,7 @@ def smart_commit_pipeline(goal, repo_root):
     # stage & commit
     _run(["git", "add", "."], repo_root)
 
-    msg = goal[:60]
+    msg = f"[Operon Auto-Patch] {goal[:50].strip()}..."
     _run(["git", "commit", "-m", msg], repo_root)
 
     # push only if remote exists (ignore errors)
