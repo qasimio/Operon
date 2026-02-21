@@ -109,8 +109,6 @@ def run_agent(state):
 
     while not state.done and state.step_count < MAX_STEPS:
 
-        from agent.logger import log
-
         action = None
 
 # ---------- HEURISTICS (Try to fast-track obvious actions) ----------
@@ -132,13 +130,6 @@ def run_agent(state):
 
         log.info(f"Executing action: {action.get('action')}")
         log.debug(f"Full state payload: {action}")
-
-        print("DEBUG ACTION:", action)
-
-        if not isinstance(action, dict) or "action" not in action:
-            print("FATAL: Invalid action dict. Ending loop.")
-            state.done = True
-            continue
 
         act = action.get("action")
         state.last_action = act
