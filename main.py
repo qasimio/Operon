@@ -5,9 +5,7 @@ from agent.logger import log
 if __name__ == "__main__":
     state = AgentState(
         goal="""
-        Find where the LLM server URL or port (8080) is defined. 
-        Change the port from 8080 to 9090.
-        Do not change anything else.
+    Update the logger in agent/logger.py to output warnings in yellow using ANSI color codes.
 """,
         repo_root="/home/UserX/Master/Operon"
     )

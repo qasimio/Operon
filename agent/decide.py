@@ -56,7 +56,8 @@ AVAILABLE TOOLS (Choose EXACTLY ONE):
 
 STRICT RULES:
 1. NEVER repeat the exact same action twice.
-2. Output ONLY valid, raw JSON. No markdown formatting, no conversational text.
+2. If you have achieved the functional goal (e.g., changing the port in the actual code), DO NOT hunt down text references in readmes, json files, or main.py. Use 'stop'."
+3. Output ONLY valid, raw JSON. No markdown formatting, no conversational text.
 '''
 
     log.debug("Calling LLM to decide next action...")
