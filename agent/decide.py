@@ -1,9 +1,9 @@
 import json
+import re
 from agent.llm import call_llm
 
 def decide_next_action(state) -> dict:
     # --- MEMORY COMPRESSION ---
-    # Only keep the last 2 observations to save VRAM context
     recent_obs = state.observations[-2:] if state.observations else []
     unique_read = list(set(state.files_read))
     unique_mod = list(set(state.files_modified))
@@ -37,20 +37,17 @@ AVAILABLE ACTIONS (Choose ONE):
 CRITICAL RULES FOR SELF-HEALING:
 - If your "Recent Observations" show that tests FAILED or a command crashed, you MUST look at the stderr/traceback, identify the file and function that caused the error, and use "rewrite_function" to fix your mistake!
 
-You must return ONLY a raw JSON object. Do not include markdown formatting or explanations at all.
+You must return ONLY a raw JSON object. Do not include markdown formatting or explanations.
 '''
 
-
-    # Call LLM with native JSON enforcement
     raw_output = call_llm(prompt, require_json=True)
     
-    print("\n[LLM RAW OUTPUT]:\n", raw_output, "\n")
+    # Strip markdown code blocks if the LLM adds them
+    clean_json = re.sub(r"```(?:json)?\n?(.*?)\n?```", r"\1", raw_output, flags=re.DOTALL).strip()
     
     try:
-        # It should parse perfectly every time now
-        data = json.loads(raw_output)
+        data = json.loads(clean_json)
         return data
     except Exception as e:
         print(f"[JSON PARSE ERROR]: {str(e)}")
-        # Emergency fallback so the loop doesn't crash
         return {"action": "stop", "error": f"Failed to parse LLM JSON: {raw_output}"}
