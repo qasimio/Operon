@@ -146,8 +146,30 @@ def run_agent(state):
         state.last_action = act
         state.step_count += 1
 
+        # ================= SEARCH REPO =================
+
+        if act == "search_repo":
+            query = action.get("query", "")
+            if not query:
+                log.error("Search query missing.")
+                state.done = True
+                continue
+            
+            log.info(f"Searching repo for: '{query}'")
+            hits = search_repo(state.repo_root, query)
+            
+            # Format the hits so the LLM knows what it found
+            if hits:
+                obs = {"search_results": f"Found query '{query}' in files: {hits}"}
+            else:
+                obs = {"search_results": f"No matches found for '{query}'."}
+                
+            state.observations.append(obs)
+            log.debug(f"Search results: {obs}")
+
         # ================= READ =================
-        if act == "read_file":
+
+        elif act == "read_file":
 
             path = action.get("path")
             if not path:

@@ -3,14 +3,13 @@ from agent.loop import run_agent
 from agent.logger import log
 
 if __name__ == "__main__":
-    state = AgentState(
 
-    goal="""
-    Modify 'search_repo' function in repo_search:
-    change the hit from :5 to :10 in return
+    state = AgentState(
+        goal="""
+    Find where the LLM server URL or port (8080) is defined. 
+    Change the port from 8080 to 9090.
     Do not change anything else.
 """,
-
         repo_root="/home/UserX/Master/Operon"
     )
 
