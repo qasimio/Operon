@@ -11,7 +11,7 @@ from agent.llm import call_llm
 from pathlib import Path
 import time
 
-MAX_STEPS = 60
+MAX_STEPS = 40
 
 def _detect_function_from_goal(goal, repo_root):
     import re
@@ -123,7 +123,7 @@ def run_agent(state):
                 "file": loc["file"]
             }
 
-        # ---------- FALLBACK TO LLM ----------
+# ---------- FALLBACK TO LLM ----------
         if not action:
             action = decide_next_action(state) or {}
 
@@ -131,6 +131,32 @@ def run_agent(state):
             log.error("FATAL: Invalid action dict. Ending loop.")
             state.done = True
             continue
+
+        # ================= PROGRAMMATIC LOOP BREAKER =================
+        last_dict = getattr(state, "last_action_dict", None)
+        if last_dict == action:
+            log.error(f"LOOP DETECTED: LLM repeated exact action: {action}")
+            
+            # The "Hard Nudge"
+            override_msg = (
+                f"SYSTEM CRITICAL ERROR: You are stuck in a loop repeating {action}. "
+                "DO NOT SEARCH AGAIN. You already have a list of potential files. "
+                "Your IMMEDIATE NEXT STEP must be to use the 'read_file' tool on the most relevant file you found (e.g., 'agent/llm.py' or 'main.py')."
+            )
+            
+            state.observations.append({"error": override_msg})
+            state.step_count += 1
+            
+            # Optional: Clear some older history to prevent Context Poisoning
+            if len(state.observations) > 10:
+                # Keep the first few (context) and the newest (the error), drop the spam in the middle
+                state.observations = state.observations[:3] + state.observations[-2:]
+                
+            continue 
+            
+        # Save the action so we can check it next loop
+        state.last_action_dict = action
+        # =============================================================
 
         log.info(f"Executing action: {action.get('action')}")
         log.debug(f"Full state payload: {action}")
@@ -231,7 +257,7 @@ def run_agent(state):
                 error_msg = f"Failed to rewrite {target_func or target_file}: {obs.get('error')}"
                 state.errors.append(error_msg)
 
-        # ================= TESTS =================
+# ================= TESTS =================
         elif act == "run_tests":
             log.info("Running test suite...")
             obs = run_tests(state.repo_root)
@@ -243,9 +269,19 @@ def run_agent(state):
                 log.error("❌ Tests FAILED.")
                 log.debug(f"Test Stderr:\n{obs.get('stderr')}")
 
-        else:
-            log.info(f"Agent finished or chose unknown action: {act}")
+        # ================= STOP =================
+        elif act == "stop":
+            log.info("Agent has declared the goal met and requested to stop.")
             state.done = True
+
+        # ================= HALLUCINATION RECOVERY =================
+        else:
+            log.warning(f"LLM hallucinated unknown action: {act}")
+            state.observations.append({
+                "error": f"SYSTEM OVERRIDE: '{act}' is NOT a valid action. You MUST strictly use one of these exact names: search_repo, read_file, rewrite_function, run_tests, or stop."
+            })
+            # Do NOT set state.done = True here. Let it read the error and try again!
+            time.sleep(1)
 
         time.sleep(0.2)
 

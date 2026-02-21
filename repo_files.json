@@ -1,6 +1,6 @@
 {
   "main.py": {
-    "summary": "This Python script initializes an agent with a specific goal and runs it using the `run_agent` function from another module, logging key events along the way.",
+    "summary": "This Python script initializes an agent with a specific goal to find and change the LLM server port from 8080 to 9090 within a given repository, logs the process, and outputs the number of steps taken to complete the task.",
     "functions": [],
     "classes": [],
     "imports": [
@@ -10,7 +10,7 @@
     ]
   },
   "tests.py": {
-    "summary": "This file tests a function called `apply_patch` from the `tools.diff_engine` module to ensure it correctly handles whitespace issues when replacing text in a string, preserving original indentation.",
+    "summary": "This Python script tests the `apply_patch` function from the `tools.diff_engine` module to ensure it correctly handles whitespace issues when replacing text within a larger code block, preserving original indentation.",
     "functions": [
       {
         "name": "test_diff_engine",
@@ -32,13 +32,13 @@
     ]
   },
   "repo_tree.json": {
-    "summary": "This JSON file represents the structure of a software repository, listing all files and directories within it.",
+    "summary": "This JSON file represents the directory structure and contents of a software project focused on automating tasks related to repositories and development processes.",
     "functions": [],
     "classes": [],
     "imports": []
   },
   "repo_files.json": {
-    "summary": "The `repo_files.json` file describes the structure and contents of a software repository, including Python scripts with functions and classes for various tasks like running tests, applying patches, searching repositories, and building a brain for the repo using an LLM.",
+    "summary": "This JSON file describes the structure and contents of a software repository, including Python scripts with functions and classes for various tasks like running tests, applying patches, searching repositories, and building a brain for the repo using an LLM.",
     "functions": [],
     "classes": [],
     "imports": []
@@ -59,7 +59,7 @@
     ]
   },
   "tools/fs_tools.py": {
-    "summary": "This file provides functions to read from and write to files within a specified repository root directory, handling errors gracefully and providing detailed success or failure information.",
+    "summary": "This file provides functions to read from and write to files within a repository, handling errors gracefully and ensuring proper mode operations.",
     "functions": [
       {
         "name": "read_file",
@@ -125,7 +125,7 @@
     ]
   },
   "tools/diff_engine.py": {
-    "summary": "This file contains functions to parse search and replace blocks from text, normalize lines for comparison, and apply patches by replacing exact or similar line sequences while handling indentation differences.",
+    "summary": "This Python script processes text to find and apply search-and-replace patches while handling whitespace differences gracefully.",
     "functions": [
       {
         "name": "parse_search_replace",
@@ -149,7 +149,7 @@
     ]
   },
   "tools/build_brain.py": {
-    "summary": "This script initializes the repository brain for a project located at \"/home/UserX/Master/Operon/\" by calling the `build_repo_brain` function with the specified directory and an LLM (Language Model) interface provided by the `call_llm` function.",
+    "summary": "This script initializes the repository brain for a project located at \"/home/UserX/Master/Operon/\" using the `build_repo_brain` function and an LLM (likely for language model) through the `call_llm` function.",
     "functions": [],
     "classes": [],
     "imports": [
@@ -158,12 +158,12 @@
     ]
   },
   "tools/repo_search.py": {
-    "summary": "This script searches through a repository's files and returns the names of files that match any of the specified keywords in their metadata or content.",
+    "summary": "This script searches a repository for files containing specific keywords and returns the top 5 most relevant files based on keyword matches.",
     "functions": [
       {
         "name": "search_repo",
         "start": 4,
-        "end": 28
+        "end": 39
       }
     ],
     "classes": [],
@@ -173,7 +173,7 @@
     ]
   },
   "tools/repo_brain.py": {
-    "summary": "Provides functions build_tree, extract_python_info, build_repo_brain, extract_python_structure_ast, Visitor.visit_FunctionDef and classes Visitor.",
+    "summary": "This Python script builds a repository brain by analyzing the structure and content of files within a given repository, extracting information about functions, classes, and imports, and generating summaries using an external language model. It saves this information in JSON files for later use.",
     "functions": [
       {
         "name": "build_tree",
@@ -241,7 +241,7 @@
     ]
   },
   "tools/code_slice.py": {
-    "summary": "This Python script loads and returns a slice of code surrounding a specified function or class within a repository.",
+    "summary": "This file defines a function `load_function_slice` that loads and returns the lines of code surrounding a specified function or class within a repository, along with metadata about the location and context of the slice.",
     "functions": [
       {
         "name": "load_function_slice",
@@ -276,7 +276,7 @@
       {
         "name": "decide_next_action",
         "start": 5,
-        "end": 55
+        "end": 54
       }
     ],
     "classes": [],
@@ -301,7 +301,7 @@
     ]
   },
   "agent/approval.py": {
-    "summary": "This Python script defines a function `ask_user_approval` that prompts the user to approve or deny an action with associated payload data by entering 'y' for yes or 'n' for no.",
+    "summary": "This file contains a function that prompts the user for approval to perform an action with given payload and returns True or False based on the user's response.",
     "functions": [
       {
         "name": "ask_user_approval",
@@ -329,22 +329,22 @@
     ]
   },
   "agent/loop.py": {
-    "summary": "This Python script automates the process of detecting a function from a given goal, rewriting that function based on instructions provided by an AI language model, and applying those changes to the source code.",
+    "summary": "This Python script automates the process of detecting a function based on a goal, rewriting that function's code using natural language instructions from an AI model, and applying those changes to a repository.",
     "functions": [
       {
         "name": "_detect_function_from_goal",
         "start": 16,
-        "end": 25
+        "end": 24
       },
       {
         "name": "_rewrite_function",
-        "start": 28,
-        "end": 95
+        "start": 26,
+        "end": 92
       },
       {
         "name": "run_agent",
-        "start": 98,
-        "end": 253
+        "start": 94,
+        "end": 271
       }
     ],
     "classes": [],
@@ -368,7 +368,7 @@
     ]
   },
   "agent/llm.py": {
-    "summary": "This Python script defines a function `call_llm` that sends prompts to an LLM server running locally and returns the response as a string or JSON object based on the input parameters.",
+    "summary": "This Python script defines a function `call_llm` that sends prompts to an LLM server running locally at `http://127.0.0.1:8080/completion`, formats the prompt in ChatML style, and returns the response as a string or JSON object based on the input parameters.",
     "functions": [
       {
         "name": "call_llm",
@@ -384,7 +384,7 @@
     ]
   },
   "agent/repo.py": {
-    "summary": "This Python script defines a function `build_repo_summary` that takes the path to a repository root and an optional maximum number of files (`max_files`) as input. It returns a string containing the paths of up to `max_files` non-hidden files in the repository, relative to the root directory.",
+    "summary": "Provides functions build_repo_summary and classes .",
     "functions": [
       {
         "name": "build_repo_summary",
@@ -398,7 +398,7 @@
     ]
   },
   "runtime/state.py": {
-    "summary": "This file defines a data class `AgentState` to track an AI worker's mission, working directory, planned steps, files interacted with, actions taken, observations, errors encountered, move count, and completion status.",
+    "summary": "This file defines a data class named AgentState to track an AI worker's mission, working directory, planned steps, files interacted with, actions taken, observations, errors encountered, move count, and completion status.",
     "functions": [],
     "classes": [
       {
