@@ -58,7 +58,6 @@ def _rewrite_function(state, func_name, slice_data, file_path):
         "- Keep the changes minimal. Do not replace the whole function.\n"
     )
 
-    log.debug(f"LLM Prompt for rewrite:\n{prompt}")
     raw_output = call_llm(prompt, require_json=False)
     log.debug(f"Raw LLM Output:\n{raw_output}")
     
@@ -119,7 +118,10 @@ def run_agent(state):
             action = {"action": "read_file", "path": loc["file"]}
 
         # NEW: Only rewrite if we haven't already modified this file!
-        elif func_name and loc and "file" in loc and state.files_read and loc["file"] not in state.files_modified:
+        elif (func_name and loc and "file" in loc 
+            and state.files_read 
+            and loc["file"] not in state.files_modified
+            and not any(f"Failed to write {func_name}" in e for e in state.errors)):
             action = {
                 "action": "rewrite_function",
                 "function": func_name,
@@ -191,7 +193,7 @@ def run_agent(state):
                 log.info(f"Successfully patched {action['file']}")
                 
                 if action["file"] not in state.files_modified:
-                    state.files_modified.append(action["file"]) # Mark as done so heuristic ignores it
+                    state.files_modified.append(action["file"]) # Mark as done
                 
                 try:
                     from tools.git_tools import smart_commit_pipeline
@@ -200,7 +202,8 @@ def run_agent(state):
                     pass
             else:
                 log.error(f"Patch failed: {obs.get('error')}")
-
+                # Tell the state about the failure so the heuristic doesn't infinite loop!
+                state.errors.append(f"Failed to rewrite {func_name}: {obs.get('error')}")
             # REMOVED state.done = True so the loop continues and the LLM can choose 'run_tests'
 
         # ================= TESTS =================

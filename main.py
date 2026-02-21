@@ -6,10 +6,8 @@ if __name__ == "__main__":
     state = AgentState(
 
     goal="""
-    Modify the `_rewrite_function` function in `agent/loop.py`,
-    right before calling LLM:
-    log.debug(f"LLM Prompt for rewrite:\n{prompt}".
-
+    Modify 'search_repo' function in repo_search:
+    change the hit from :5 to :10 in return
     Do not change anything else.
 """,
 
