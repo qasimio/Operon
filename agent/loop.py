@@ -142,14 +142,16 @@ def run_agent(state):
         if last_dict == action:
             log.error(f"LOOP DETECTED: LLM repeated exact action: {action}")
             
-            # Context-Aware Hard Nudge
+# Context-Aware Hard Nudge
             act_name = action.get("action")
             if act_name == "search_repo":
-                nudge = "DO NOT SEARCH AGAIN. You MUST use 'read_file' on the most promising file you found."
+                nudge = "DO NOT SEARCH FOR THE SAME THING AGAIN. Read a file from the results."
             elif act_name == "read_file":
-                nudge = "DO NOT READ THE SAME FILE AGAIN. You MUST use 'rewrite_function' to modify the code, or use 'stop' if no changes are needed."
+                target_path = action.get("path", "this file")
+                nudge = f"DO NOT READ '{target_path}' AGAIN. You already have the contents in your observations. You MUST use 'rewrite_function' to edit it, or move on to your next task."
             elif act_name == "rewrite_function":
-                nudge = "DO NOT EDIT REPEATEDLY. You MUST use 'run_tests' to verify your changes, or 'stop' if the goal is met."
+                target_path = action.get("file", "this file")
+                nudge = f"DO NOT EDIT '{target_path}' REPEATEDLY WITHOUT FIXING THE ERROR. Read the error message carefully. If it's fixed, move to the next task or 'stop'."
             else:
                 nudge = "YOU ARE IN A LOOP. You MUST pick a completely different action."
 

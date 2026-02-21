@@ -9,32 +9,30 @@ def decide_next_action(state) -> dict:
     recent_obs = "\n".join([str(obs) for obs in state.observations[-3:]]) if state.observations else "None"
     unique_read = list(set(state.files_read))
     unique_mod = list(set(state.files_modified))
-    
+
 # --- DYNAMIC STATE ENFORCEMENT ---
     state_hint = ""
     if state.last_action == "search_repo":
         if "error" in recent_obs:
-            state_hint = "CRITICAL INSTRUCTION: Your last search failed. DO NOT search again. Pick a file from previous findings and use 'read_file'."
+            state_hint = "Your search failed. Try a different query or read a file you already know about."
         else:
-            state_hint = "CRITICAL INSTRUCTION: You just searched. You MUST now use 'read_file' on the best file found."
+            state_hint = "Search successful. Now use 'read_file' on the exact file you need to edit."
     elif state.last_action == "read_file":
-        state_hint = "CRITICAL INSTRUCTION: You just read a file. You MUST now use 'rewrite_function' to make the required changes, or 'stop' if no changes are needed."
+        state_hint = "You just read a file. If you have the context you need, use 'rewrite_function' to apply the patch. If you are working on multiple tasks, do them ONE AT A TIME. Edit this file first before moving to the next."
     elif state.last_action == "rewrite_function":
-        # ========================================
-        # MULTITASKING
-        # ========================================
         if "error" in recent_obs:
-            state_hint = "CRITICAL INSTRUCTION: You last edit failed. Read the error and try 'rewrite_function' again to fix it."
+            state_hint = "CRITICAL: Your last edit failed (Check the SyntaxError or match error). You MUST use 'rewrite_function' again to fix your mistake."
         else:
-            state_hint = "CRITICAL INSTRUCITON: You successfully updated a file. Evaluate the original GOAL. If there are other files or functions that still need editing to complete the goal, use 'search_repo' or 'read_file' to continue. If the goal is 100% complete across all files, you must use 'stop'."
+            state_hint = f"SUCCESS: You just modified a file! Files patched so far: {unique_mod}. Re-read the ORIGINAL GOAL. If there are other tasks or files left, use 'search_repo' or 'read_file' to start the next task. If EVERY task is complete, use 'stop'."
 
-    prompt = f'''You are Operon, an autonomous senior software engineer. Your goal is to manage tools to fix code.
+    prompt = f'''You are Operon, an autonomous senior software engineer capable of handling complex, multi-step tasks.
 
-GOAL: {state.goal}
+GOAL: 
+{state.goal}
 
 CURRENT STATE:
 - Files read: {unique_read}
-- Files modified: {unique_mod}
+- Files modified (Tasks completed): {unique_mod}
 - Last action executed: {state.last_action}
 
 RECENT OBSERVATIONS:
@@ -44,22 +42,16 @@ RECENT OBSERVATIONS:
 
 AVAILABLE TOOLS (Choose EXACTLY ONE):
 1. {{"action": "search_repo", "query": "actual keywords"}} 
-   (Find files related to the goal.)
-   
 2. {{"action": "read_file", "path": "path/to/file.py"}} 
-   (Read full context of a file before editing.)
-   
 3. {{"action": "rewrite_function", "file": "path/to/file.py", "function": "function_name"}} 
-   (Delegates actual coding to a sub-agent. DO NOT include new code in this JSON payload.)
-   
 4. {{"action": "stop"}} 
-   (Use this immediately when the goal is completely finished.)
 
-STRICT RULES FOR COMPLETION & SELF-HEALING:
-1. NEVER repeat the exact same action twice.
-2. DONE HEURISTIC: If you have achieved the functional goal (e.g., changing a port or updating a logger in the actual code), DO NOT hunt down text references in readmes, json files, or main.py. You MUST use 'stop' immediately.
-3. Output ONLY valid, raw JSON. No markdown formatting, no conversational text.
-'''
+STRICT RULES FOR MULTI-TASKING:
+1. NEVER repeat the exact same action twice in a row.
+2. Knock out tasks sequentially. Read File A -> Rewrite File A -> Read File B -> Rewrite File B -> Stop.
+3. DO NOT use 'stop' until EVERY part of the Goal has been achieved.
+4. Output ONLY valid, raw JSON. No markdown formatting.
+'''    
 
     log.debug("Calling LLM to decide next action...")
     raw_output = call_llm(prompt, require_json=True)

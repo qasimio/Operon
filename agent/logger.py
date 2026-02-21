@@ -4,7 +4,7 @@ import sys
 def setup_logger(log_file="operon.log"):
     logger = logging.getLogger("Operon")
     logger.setLevel(logging.DEBUG) 
-    BROKEN
+    logger.handlers[0].formatter._fmt += ' BROKEN'
     
     if not logger.handlers:
         # Console Handler: Standard output
