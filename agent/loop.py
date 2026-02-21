@@ -52,11 +52,10 @@ def _rewrite_function(state, func_name, slice_data, file_path):
         ">>>>>>> REPLACE\n\n"
         "- ONLY output the SEARCH/REPLACE block. No conversational text.\n"
         "RULES:\n"
-        "- The SEARCH block must EXACTLY match the existing code character-for-character, including ALL leading spaces.\n"
-        "- INDENTATION IS CRITICAL. The REPLACE block must preserve the exact same indentation as the original code.\n"
-        "- Do not use tabs. Use spaces for indentation.\n"
-        "- Keep the changes minimal. Do not replace the whole function.\n"
+        "- The SEARCH block must EXACTLY match the existing code character-for-character.\n"
+        "- INDENTATION IS MANDATORY. You MUST include all leading spaces in the REPLACE block. If you drop the spaces, the code will break.\n"
         "- ONLY output the SEARCH/REPLACE block. No conversational text.\n"
+        "- Keep the changes minimal. Do not replace the whole function.\n"
     )
 
     raw_output = call_llm(prompt, require_json=False)
@@ -112,12 +111,12 @@ def run_agent(state):
 
         action = None
 
-        # ---------- HEURISTICS (Try to fast-track obvious actions) ----------
+# ---------- HEURISTICS (Try to fast-track obvious actions) ----------
         if not state.files_read and loc and "file" in loc:
             action = {"action": "read_file", "path": loc["file"]}
 
-        elif func_name and loc and "file" in loc and state.files_read:
-            # Only auto-rewrite if we have already read a file to get context
+        # NEW: Only rewrite if we haven't already modified this file!
+        elif func_name and loc and "file" in loc and state.files_read and loc["file"] not in state.files_modified:
             action = {
                 "action": "rewrite_function",
                 "function": func_name,
@@ -190,7 +189,17 @@ def run_agent(state):
                 except Exception:
                     pass
 
-            state.done = True
+
+            if obs.get("success"):
+                if action["file"] not in state.files_modified:
+                    state.files_modified.append(action["file"]) # Mark as done so heuristic ignores it
+                try:
+                    from tools.git_tools import smart_commit_pipeline
+                    smart_commit_pipeline(state.goal, state.repo_root)
+                except Exception:
+                    pass
+
+            # REMOVED state.done = True so the loop continues and the LLM can choose 'run_tests'
 
         # ================= TESTS =================
         elif act == "run_tests":
