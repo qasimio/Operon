@@ -1,6 +1,6 @@
 {
   "main.py": {
-    "summary": "Provides functions  and classes .",
+    "summary": "This Python script initializes an `AgentState` with a goal to modify the `search_repo` function by adding a print statement before initializing the `hits` array. It then runs an agent using the provided state and prints \"DONE\" along with the final state after execution.",
     "functions": [],
     "classes": [],
     "imports": [
@@ -9,7 +9,7 @@
     ]
   },
   "tests.py": {
-    "summary": "Provides functions test_diff_engine and classes .",
+    "summary": "This Python script tests the `apply_patch` function from the `tools.diff_engine` module to ensure it correctly handles whitespace issues when replacing text in a string, preserving original indentation.",
     "functions": [
       {
         "name": "test_diff_engine",
@@ -31,13 +31,13 @@
     ]
   },
   "repo_tree.json": {
-    "summary": "Provides functions  and classes .",
+    "summary": "This JSON file represents the structure of a repository, detailing its files and directories.",
     "functions": [],
     "classes": [],
     "imports": []
   },
   "repo_files.json": {
-    "summary": "Provides functions  and classes .",
+    "summary": "This JSON file describes the structure and contents of a software repository, including Python scripts with functions and classes for various tasks like running tests, applying patches, searching repositories, and building a brain for the repo using an LLM.",
     "functions": [],
     "classes": [],
     "imports": []
@@ -58,7 +58,7 @@
     ]
   },
   "tools/fs_tools.py": {
-    "summary": "Provides functions read_file, write_file and classes .",
+    "summary": "This file provides functions to read from and write to files within a repository, handling errors gracefully and ensuring proper file creation and content formatting.",
     "functions": [
       {
         "name": "read_file",
@@ -78,7 +78,7 @@
     ]
   },
   "tools/shell_tools.py": {
-    "summary": "Provides functions run_tests and classes .",
+    "summary": "This file contains a function `run_tests` that runs project tests using the specified command (defaulting to pytest -q), captures the output and return code, and returns a dictionary with the results indicating success or failure along with any error messages.",
     "functions": [
       {
         "name": "run_tests",
@@ -93,7 +93,7 @@
     ]
   },
   "tools/git_tools.py": {
-    "summary": "Just one simple sentence.\n\n:",
+    "summary": "This Python script provides functions for running Git commands, creating branches, and committing changes based on a given goal.",
     "functions": [
       {
         "name": "_run",
@@ -123,7 +123,7 @@
     ]
   },
   "tools/diff_engine.py": {
-    "summary": "Provides functions parse_search_replace, _normalize_lines, apply_patch and classes .",
+    "summary": "This Python script processes text to find and apply search-and-replace patches while handling whitespace differences gracefully.",
     "functions": [
       {
         "name": "parse_search_replace",
@@ -147,7 +147,7 @@
     ]
   },
   "tools/build_brain.py": {
-    "summary": "Just one simple sentence.\n\nThis Python script uses functions to build a brain for a repository located at \"/home/UserX/Master/Operon/\" and calls an LLM (Large Language Model) to process the data.",
+    "summary": "This script initializes the repository brain for a project located at \"/home/UserX/Master/Operon/\" using the `build_repo_brain` function and an LLM (likely for language model) to process it.",
     "functions": [],
     "classes": [],
     "imports": [
@@ -239,7 +239,7 @@
     ]
   },
   "tools/code_slice.py": {
-    "summary": "Provides functions load_function_slice and classes .",
+    "summary": "This file defines a function `load_function_slice` that loads and returns the lines of code surrounding a specified function or class within a repository, along with metadata about the location and context of the slice.",
     "functions": [
       {
         "name": "load_function_slice",
@@ -254,7 +254,7 @@
     ]
   },
   "agent/tool_jail.py": {
-    "summary": "Provides functions validate_action and classes .",
+    "summary": "This Python script validates JSON input to ensure it contains a valid action and all required fields for that action according to predefined rules.",
     "functions": [
       {
         "name": "validate_action",
@@ -269,29 +269,33 @@
     ]
   },
   "agent/decide.py": {
-    "summary": "Provides functions decide_next_action and classes .",
+    "summary": "This file contains functions for cleaning JSON and deciding the next action based on a given state using an LLM (Large Language Model).",
     "functions": [
       {
+        "name": "_clean_json",
+        "start": 5,
+        "end": 23
+      },
+      {
         "name": "decide_next_action",
-        "start": 7,
-        "end": 104
+        "start": 25,
+        "end": 71
       }
     ],
     "classes": [],
     "imports": [
-      "call_llm",
       "json",
       "re",
-      "json"
+      "call_llm"
     ]
   },
   "agent/planner.py": {
-    "summary": "Provides functions make_plan and classes .",
+    "summary": "This file defines a function `make_plan` that generates a list of high-level logical steps to achieve a given goal using an external language model.",
     "functions": [
       {
         "name": "make_plan",
         "start": 4,
-        "end": 41
+        "end": 36
       }
     ],
     "classes": [],
@@ -300,7 +304,7 @@
     ]
   },
   "agent/approval.py": {
-    "summary": "Provides functions ask_user_approval and classes .",
+    "summary": "This file contains a function that prompts the user for approval of an action with associated payload data and returns True or False based on the user's response.",
     "functions": [
       {
         "name": "ask_user_approval",
@@ -312,7 +316,7 @@
     "imports": []
   },
   "agent/loop.py": {
-    "summary": "Provides functions _detect_function_from_goal, _rewrite_function, run_agent and classes .",
+    "summary": "This Python script defines functions and logic for detecting a function from a goal, rewriting that function based on instructions, and running an agent to manage these tasks within a repository.",
     "functions": [
       {
         "name": "_detect_function_from_goal",
@@ -322,12 +326,12 @@
       {
         "name": "_rewrite_function",
         "start": 25,
-        "end": 93
+        "end": 97
       },
       {
         "name": "run_agent",
-        "start": 95,
-        "end": 210
+        "start": 99,
+        "end": 214
       }
     ],
     "classes": [],
@@ -349,12 +353,12 @@
     ]
   },
   "agent/llm.py": {
-    "summary": "Just one simple sentence.\n\n:",
+    "summary": "This Python script defines a function `call_llm` that sends prompts to a language model running on a local server and returns the generated text or JSON response based on the input parameters.",
     "functions": [
       {
         "name": "call_llm",
         "start": 5,
-        "end": 23
+        "end": 24
       }
     ],
     "classes": [],
@@ -377,7 +381,7 @@
     ]
   },
   "runtime/state.py": {
-    "summary": "Provides functions  and classes AgentState.",
+    "summary": "This file defines a data class `AgentState` to track an AI worker's mission, working directory, planned steps, files interacted with, actions taken, observations, errors encountered, move count, and completion status.",
     "functions": [],
     "classes": [
       {

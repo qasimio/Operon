@@ -4,10 +4,9 @@ from agent.loop import run_agent
 if __name__ == "__main__":
     state = AgentState(
         goal="""
-Modify the write_file function in tools/fs_tools.py so that:
-
-Add print("HELLO") inside write_file function
-- Do NOT change existing functionality.
+    Modify the `search_repo` function in `tools/repo_search.py`.
+    Add a print statement `print(f"Searching for: {query}")` right before the `hits = []` array is initialized.
+    Do not change anything else.
 """,
         repo_root="/home/UserX/Master/Operon"
     )

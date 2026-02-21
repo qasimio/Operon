@@ -12,15 +12,16 @@ import time
 
 MAX_STEPS = 30
 
-
 def _detect_function_from_goal(goal, repo_root):
-    words = goal.replace("(", " ").replace(")", " ").replace(".", " ").split()
+    # Strip ALL punctuation so we don't miss functions wrapped in backticks or quotes
+    import re
+    clean_goal = re.sub(r"[^\w\s]", " ", goal)
+    words = clean_goal.split()
     for w in words:
         loc = find_function(repo_root, w)
         if loc:
             return w, loc
     return None, None
-
 
 def _rewrite_function(state, func_name, slice_data, file_path):
     from pathlib import Path
@@ -28,34 +29,38 @@ def _rewrite_function(state, func_name, slice_data, file_path):
     
     current_code = slice_data["code"]
 
-    prompt = f"""
+# -- prompt    
+    prompt = f'''
 You are Operon, a surgical code editor.
 GOAL: {state.goal}
 
 CURRENT FUNCTION TO MODIFY:
 ```python
 {current_code}
+
 INSTRUCTIONS:
 You must modify the code using a SEARCH/REPLACE block.
-
-    Find the exact lines you need to change.
-
+    Find the exact original lines you need to change.
     Output a SEARCH block with the exact original lines.
-
     Output a REPLACE block with the new lines.
 
-FORMAT: <<<<<<< SEARCH [exact original lines to replace]
+EXAMPLE OUTPUT FORMAT: <<<<<<< SEARCH def hello_world(): print("hello")
 
-[new modified lines]
+def hello_world():
+    print("hello, world!")
 
                             REPLACE
 
 RULES:
 
-    The SEARCH block must EXACTLY match the existing code character-for-character, including indentation.
+    The SEARCH block must EXACTLY match the existing code character-for-character.
 
-    Keep the changes as minimal as possible. Do not replace the whole function if you only need to change one line.
-    """
+    Keep the changes minimal. Do not replace the whole function.
+
+    ONLY output the SEARCH/REPLACE block. No conversational text.
+    '''
+
+
 
     raw_output = call_llm(prompt, require_json=False)
 
@@ -110,33 +115,27 @@ def run_agent(state):
 
         action = None
 
-        # ---------- READ FIRST ----------
-        if not state.files_read:
+        # ---------- HEURISTICS (Try to fast-track obvious actions) ----------
+        if not state.files_read and loc and "file" in loc:
+            action = {"action": "read_file", "path": loc["file"]}
 
-            if loc and "file" in loc:
-                action = {"action": "read_file", "path": loc["file"]}
-
-            else:
-                hits = search_repo(state.repo_root, state.goal)
-                if hits:
-                    action = {"action": "read_file", "path": hits[0]}
-
-        # ---------- FUNCTION REWRITE ----------
-        elif func_name and loc and "file" in loc:
-
+        elif func_name and loc and "file" in loc and state.files_read:
+            # Only auto-rewrite if we have already read a file to get context
             action = {
                 "action": "rewrite_function",
                 "function": func_name,
                 "file": loc["file"]
             }
 
-        # ---------- FALLBACK ----------
-        else:
+        # ---------- FALLBACK TO LLM ----------
+        # If heuristics didn't trigger, or failed, LET THE LLM DECIDE
+        if not action:
             action = decide_next_action(state) or {}
 
         print("DEBUG ACTION:", action)
 
-        if not isinstance(action, dict):
+        if not isinstance(action, dict) or "action" not in action:
+            print("FATAL: Invalid action dict. Ending loop.")
             state.done = True
             continue
 
