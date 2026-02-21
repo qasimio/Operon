@@ -24,13 +24,13 @@ Decide the next logical action to progress towards the goal.
 
 AVAILABLE ACTIONS (Choose ONE):
 1. Read a file to understand it:
-   {{"action": "read_file", "path": "path/to/file.py"}}
+   {"action": "read_file", "path": "path/to/file.py"}
 2. Rewrite a specific function (if you know what to change):
-   {{"action": "rewrite_function", "file": "path/to/file.py", "function": "function_name"}}
-3. Run tests:
-   {{"action": "run_tests"}}
-4. Stop execution if goal is met:
-   {{"action": "stop"}}
+   {"action": "rewrite_function", "file": "path/to/file.py", "function": "function_name"}
+3. Run tests (CRITICAL: You MUST run tests immediately after rewriting a function to verify your changes!):
+   {"action": "run_tests"}
+4. Stop execution if the goal is met AND tests have passed:
+   {"action": "stop"}
 
 You must return ONLY a raw JSON object. Do not include markdown formatting or explanations.
 '''
