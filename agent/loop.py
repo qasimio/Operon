@@ -32,11 +32,13 @@ def _rewrite_function(state, func_name, slice_data, file_path):
 
     prompt = (
         "You are Operon, a surgical code editor.\n"
+
         f"GOAL: {state.goal}\n\n"
         "CURRENT FUNCTION TO MODIFY:\n"
         "```python\n"
         f"{current_code}\n"
         "```\n\n"
+
         "INSTRUCTIONS:\n"
         "You must modify the code using a SEARCH/REPLACE block.\n"
         "1. Find the exact original lines you need to change.\n"
@@ -50,10 +52,11 @@ def _rewrite_function(state, func_name, slice_data, file_path):
         "    def hello_world():\n"
         "        print(\"hello, world!\")\n"
         ">>>>>>> REPLACE\n\n"
+
         "RULES:\n"
         "- The SEARCH block must EXACTLY match the existing code character-for-character, including ALL leading spaces.\n"
         "- INDENTATION IS CRITICAL. The REPLACE block must preserve the exact same indentation as the original code.\n"
-        "- Do not use tabs. Use spaces for indentation.\n"
+        "- Do not use tabs. Use spaces for indentation(4 spaces per indentation).\n"
         "- Keep the changes minimal. Do not replace the whole function.\n"
         "- ONLY output the SEARCH/REPLACE block. No conversational text.\n"
     )
