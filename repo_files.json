@@ -9,7 +9,7 @@
     ]
   },
   "tests.py": {
-    "summary": "This Python script tests the `apply_patch` function from the `tools.diff_engine` module to ensure it correctly handles whitespace issues when replacing text in a string, preserving original indentation.",
+    "summary": "This Python script tests a function called `apply_patch` from the `tools.diff_engine` module to ensure it correctly handles whitespace issues when replacing text within a larger code snippet.",
     "functions": [
       {
         "name": "test_diff_engine",
@@ -43,7 +43,7 @@
     "imports": []
   },
   "tools/function_locator.py": {
-    "summary": "Provides functions find_function and classes .",
+    "summary": "This Python script searches a repository for a function or class by name and returns the file path along with start and end line numbers if found.",
     "functions": [
       {
         "name": "find_function",
@@ -58,7 +58,7 @@
     ]
   },
   "tools/fs_tools.py": {
-    "summary": "This file provides functions to read from and write to files within a repository, handling errors gracefully and ensuring proper file creation and content formatting.",
+    "summary": "This file provides functions to read from and write to files within a specified repository root directory, handling errors gracefully and ensuring proper file modes for appending or overwriting content.",
     "functions": [
       {
         "name": "read_file",
@@ -78,7 +78,7 @@
     ]
   },
   "tools/shell_tools.py": {
-    "summary": "This file contains a function `run_tests` that runs project tests using the specified command (defaulting to pytest -q), captures the output and return code, and returns a dictionary with the results indicating success or failure along with any error messages.",
+    "summary": "This file contains a function to run tests for a project located at a specified repository root using a given test command, defaulting to pytest -q. It captures and returns the results of the test execution, including success status, standard output, standard error, and return code.",
     "functions": [
       {
         "name": "run_tests",
@@ -93,7 +93,7 @@
     ]
   },
   "tools/git_tools.py": {
-    "summary": "This Python script provides functions for running Git commands, creating branches, and committing changes based on a given goal.",
+    "summary": "This file contains functions for running Git commands, creating branches, and committing changes based on a given goal.",
     "functions": [
       {
         "name": "_run",
@@ -147,7 +147,7 @@
     ]
   },
   "tools/build_brain.py": {
-    "summary": "This script initializes the repository brain for a project located at \"/home/UserX/Master/Operon/\" using the `build_repo_brain` function and an LLM (likely for language model) to process it.",
+    "summary": "This script initializes the repository brain for a project located at \"/home/UserX/Master/Operon/\" using the call_llm function to interact with an LLM (likely for natural language processing tasks).",
     "functions": [],
     "classes": [],
     "imports": [
@@ -156,12 +156,12 @@
     ]
   },
   "tools/repo_search.py": {
-    "summary": "Provides functions search_repo and classes .",
+    "summary": "This script searches for a query within function names listed in a JSON file and returns up to five matching files from the repository root.",
     "functions": [
       {
         "name": "search_repo",
         "start": 4,
-        "end": 23
+        "end": 24
       }
     ],
     "classes": [],
@@ -239,7 +239,7 @@
     ]
   },
   "tools/code_slice.py": {
-    "summary": "This file defines a function `load_function_slice` that loads and returns the lines of code surrounding a specified function or class within a repository, along with metadata about the location and context of the slice.",
+    "summary": "This Python script loads and returns a slice of code around a specified function or class within a repository.",
     "functions": [
       {
         "name": "load_function_slice",
@@ -269,28 +269,22 @@
     ]
   },
   "agent/decide.py": {
-    "summary": "This file contains functions for cleaning JSON and deciding the next action based on a given state using an LLM (Large Language Model).",
+    "summary": "This Python script defines a function `decide_next_action` that takes the current state of an agent as input and uses a language model to decide the next logical action for the agent to take towards its goal. The decision is returned in JSON format.",
     "functions": [
       {
-        "name": "_clean_json",
-        "start": 5,
-        "end": 23
-      },
-      {
         "name": "decide_next_action",
-        "start": 25,
-        "end": 71
+        "start": 4,
+        "end": 50
       }
     ],
     "classes": [],
     "imports": [
       "json",
-      "re",
       "call_llm"
     ]
   },
   "agent/planner.py": {
-    "summary": "This file defines a function `make_plan` that generates a list of high-level logical steps to achieve a given goal using an external language model.",
+    "summary": "This file defines a function `make_plan` that takes a software development goal and generates a list of high-level logical steps to achieve it using an external language model.",
     "functions": [
       {
         "name": "make_plan",
@@ -304,7 +298,7 @@
     ]
   },
   "agent/approval.py": {
-    "summary": "This file contains a function that prompts the user for approval of an action with associated payload data and returns True or False based on the user's response.",
+    "summary": "This file contains a function that prompts the user to approve or deny an action with associated payload data.",
     "functions": [
       {
         "name": "ask_user_approval",
@@ -316,22 +310,22 @@
     "imports": []
   },
   "agent/loop.py": {
-    "summary": "This Python script defines functions and logic for detecting a function from a goal, rewriting that function based on instructions, and running an agent to manage these tasks within a repository.",
+    "summary": "This Python script automates the process of detecting a function based on a goal, rewriting that function using natural language instructions from an AI model, and applying the changes to the source code.",
     "functions": [
       {
         "name": "_detect_function_from_goal",
-        "start": 16,
-        "end": 22
+        "start": 15,
+        "end": 24
       },
       {
         "name": "_rewrite_function",
-        "start": 25,
-        "end": 97
+        "start": 27,
+        "end": 93
       },
       {
         "name": "run_agent",
-        "start": 99,
-        "end": 214
+        "start": 96,
+        "end": 205
       }
     ],
     "classes": [],
@@ -347,23 +341,25 @@
       "call_llm",
       "Path",
       "time",
+      "re",
       "Path",
       "parse_search_replace",
       "smart_commit_pipeline"
     ]
   },
   "agent/llm.py": {
-    "summary": "This Python script defines a function `call_llm` that sends prompts to a language model running on a local server and returns the generated text or JSON response based on the input parameters.",
+    "summary": "This Python script defines a function `call_llm` that sends prompts to an LLM server running locally at `http://127.0.0.1:8080/completion`, formats the prompt in ChatML style, and returns the response as a string or JSON object based on the input parameters.",
     "functions": [
       {
         "name": "call_llm",
-        "start": 5,
-        "end": 24
+        "start": 6,
+        "end": 28
       }
     ],
     "classes": [],
     "imports": [
-      "requests"
+      "requests",
+      "json"
     ]
   },
   "agent/repo.py": {
