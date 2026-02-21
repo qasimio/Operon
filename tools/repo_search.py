@@ -2,23 +2,27 @@ import json
 from pathlib import Path
 
 def search_repo(repo_root, query):
-
     repo = Path(repo_root)
-
+    
     with open(repo / "repo_files.json") as f:
         data = json.load(f)
 
-    print(f"Searching for: {query}")
     hits = []
-
-    q = query.lower()
+    # Split the query into individual keywords
+    keywords = query.lower().split()
 
     for file, info in data.items():
+        # Build a search blob using list comprehensions to avoid dictionary TypeErrors
+        blob = " ".join([
+            file.lower(),
+            info.get("summary", "").lower(),
+            " ".join([f.get("name", "") for f in info.get("functions", [])]).lower(),
+            " ".join([c.get("name", "") for c in info.get("classes", [])]).lower(),
+            " ".join(info.get("imports", [])).lower()
+        ])
 
-        blob = " ".join(
-            [f["name"] for f in info.get("functions", [])]).lower(),
+        # If ANY of the keywords are in this file's blob, count it as a hit
+        if any(k in blob for k in keywords):
+            hits.append(file)
 
-        if q in blob:
-            hits.append(file)   # IMPORTANT: file already contains full repo path
-
-    return hits[:10]
+    return hits[:5]

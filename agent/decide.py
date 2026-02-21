@@ -34,7 +34,9 @@ AVAILABLE ACTIONS (Choose ONE):
 5. Stop execution if the goal is met AND tests have passed:
    {{"action": "stop"}}
 
-CRITICAL RULES FOR SELF-HEALING:
+CRITICAL RULES FOR BEHAVIOR:
+- If a search returns "No matches found", DO NOT repeat the exact same search. Try a single, unique keyword (e.g., "8080" or "port").
+- If you just successfully used "rewrite_function" to edit a file, DO NOT edit it again immediately! Your next action MUST be "run_tests" to verify it, or "stop" if tests are not needed.
 - If your "Recent Observations" show that tests FAILED or a command crashed, you MUST look at the stderr/traceback, identify the file and function that caused the error, and use "rewrite_function" to fix your mistake!
 
 You must return ONLY a raw JSON object. Do not include markdown formatting or explanations.
