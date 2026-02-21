@@ -1,10 +1,10 @@
+# Operon's first task done
 import logging
 import sys
 
 def setup_logger(log_file="operon.log"):
     logger = logging.getLogger("Operon")
     logger.setLevel(logging.DEBUG) 
-    BROKEN
     
     if not logger.handlers:
         # Console Handler: Standard output
