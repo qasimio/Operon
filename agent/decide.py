@@ -4,19 +4,6 @@ import json
 import re
 
 
-def _extract_json(text: str):
-    try:
-        return json.loads(text)
-    except Exception:
-        m = re.search(r'\{.*\}', text, re.DOTALL)
-        if m:
-            try:
-                return json.loads(m.group(0))
-            except Exception:
-                return None
-    return None
-
-
 def decide_next_action(state) -> dict:
     """
     Decide the next action. If the agent has a function_context observation
@@ -62,9 +49,9 @@ Requirements:
 
 Return JSON only.
 """
-        output = call_llm(prompt)
+        output = call_llm(prompt, require_json=True)
 
-        data = _extract_json(output)
+        data = json.loads(output)
         if data:
             return data
         # fallthrough if model didn't return JSON
@@ -92,8 +79,8 @@ Available actions:
 Return JSON only.
 """
 
-    output = call_llm(prompt)
-    data = _extract_json(output)
+    output = call_llm(prompt, require_json=True)
+    data = json.loads(output)
     if data:
         return data
 
