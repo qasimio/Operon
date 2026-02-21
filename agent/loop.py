@@ -4,11 +4,11 @@ from agent.decide import decide_next_action
 from agent.planner import make_plan
 from agent.logger import log
 from tools.fs_tools import read_file
-from tools.shell_tools import run_tests
 from tools.function_locator import find_function
 from tools.code_slice import load_function_slice
 from agent.llm import call_llm
 from pathlib import Path
+import ast
 import time
 
 MAX_STEPS = 40
@@ -129,8 +129,6 @@ def run_agent(state):
                 nudge = "DO NOT READ THE SAME FILE AGAIN. You MUST use 'rewrite_function' to modify the code, or use 'stop' if no changes are needed."
             elif act_name == "rewrite_function":
                 nudge = "DO NOT EDIT REPEATEDLY. You MUST use 'run_tests' to verify your changes, or 'stop' if the goal is met."
-            elif act_name == "run_tests":
-                nudge = "DO NOT RUN TESTS REPEATEDLY. If they failed, read a file to fix the error. If they passed, you MUST use 'stop'."
             else:
                 nudge = "YOU ARE IN A LOOP. You MUST pick a completely different action."
 
@@ -247,19 +245,7 @@ def run_agent(state):
                 error_msg = f"Failed to rewrite {target_func or target_file}: {obs.get('error')}"
                 state.errors.append(error_msg)
 
-# ================= TESTS =================
-        elif act == "run_tests":
-            log.info("Running test suite...")
-            obs = run_tests(state.repo_root)
-            state.observations.append(obs)
-            
-            if obs.get("success"):
-                log.info("✅ Tests passed successfully.")
-            else:
-                log.error("❌ Tests FAILED.")
-                log.debug(f"Test Stderr:\n{obs.get('stderr')}")
-
-        # ================= STOP =================
+# ================= STOP =================
         elif act == "stop":
             log.info("Agent has declared the goal met and requested to stop.")
             state.done = True
@@ -268,9 +254,8 @@ def run_agent(state):
         else:
             log.warning(f"LLM hallucinated unknown action: {act}")
             state.observations.append({
-                "error": f"SYSTEM OVERRIDE: '{act}' is NOT a valid action. You MUST strictly use one of these exact names: search_repo, read_file, rewrite_function, run_tests, or stop."
+                "error": f"SYSTEM OVERRIDE: '{act}' is NOT a valid action. You MUST strictly use one of these exact names: search_repo, read_file, rewrite_function, or stop."
             })
-            # Do NOT set state.done = True here. Let it read the error and try again!
             time.sleep(1)
 
         time.sleep(0.2)

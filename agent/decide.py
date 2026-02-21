@@ -20,9 +20,7 @@ def decide_next_action(state) -> dict:
     elif state.last_action == "read_file":
         state_hint = "CRITICAL INSTRUCTION: You just read a file. You MUST now use 'rewrite_function' to make the required changes, or 'stop' if no changes are needed."
     elif state.last_action == "rewrite_function":
-        state_hint = "CRITICAL INSTRUCTION: You just successfully delegated the edit to the sub-agent. The file has been updated! DO NOT edit the file again. You MUST now use 'run_tests' or 'stop'."
-    elif state.last_action == "run_tests":
-        state_hint = "CRITICAL INSTRUCTION: You just ran tests. If they passed, you MUST use 'stop'. If they failed, use 'read_file' or 'rewrite_function' to fix the error."
+        state_hint = "CRITICAL INSTRUCTION: You just successfully delegated the edit to the sub-agent. The file has been updated! DO NOT edit the file again. You MUST now use 'stop'."
 
     prompt = f'''You are Operon, an autonomous senior software engineer. Your goal is to manage tools to fix code.
 
@@ -39,25 +37,22 @@ RECENT OBSERVATIONS:
 {state_hint}
 
 AVAILABLE TOOLS (Choose EXACTLY ONE):
-1. {{"action": "search_repo", "query": "8080"}} 
-   (Use actual search terms related to the goal, do NOT use placeholder text.)
+1. {{"action": "search_repo", "query": "actual keywords"}} 
+   (Find files related to the goal.)
    
 2. {{"action": "read_file", "path": "path/to/file.py"}} 
-   (Read full context of a file)
+   (Read full context of a file before editing.)
    
 3. {{"action": "rewrite_function", "file": "path/to/file.py", "function": "function_name"}} 
-   (Delegates the actual coding to a sub-agent. DO NOT include the new code in your JSON payload. The sub-agent will ask for it later.)
+   (Delegates actual coding to a sub-agent. DO NOT include new code in this JSON payload.)
    
-4. {{"action": "run_tests"}} 
-   (Verify changes)
-   
-5. {{"action": "stop"}} 
-   (Use this immediately when the goal is completely finished)
+4. {{"action": "stop"}} 
+   (Use this immediately when the goal is completely finished.)
 
-STRICT RULES:
+STRICT RULES FOR COMPLETION & SELF-HEALING:
 1. NEVER repeat the exact same action twice.
-2. If you have achieved the functional goal (e.g., changing the port in the actual code), DO NOT hunt down text references in readmes, json files, or main.py. Use 'stop'."
-2. Output ONLY valid, raw JSON. No markdown formatting, no conversational text.
+2. DONE HEURISTIC: If you have achieved the functional goal (e.g., changing a port or updating a logger in the actual code), DO NOT hunt down text references in readmes, json files, or main.py. You MUST use 'stop' immediately.
+3. Output ONLY valid, raw JSON. No markdown formatting, no conversational text.
 '''
 
     log.debug("Calling LLM to decide next action...")
