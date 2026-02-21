@@ -7,7 +7,7 @@ if __name__ == "__main__":
         goal="""
 Goal 1: "In agent/logger.py, add comment on top that # Operon's first task done"
 after finishing
-Goal 2: "Inside "repo.py" add comment # Chill, Operon can handle multiple tasks ;) in the end of file."
+Goal 2: "Inside "agent/repo.py" add comment # Chill, Operon can handle multiple tasks ;) in the end of file."
 """,
         repo_root="/home/UserX/Master/Operon"
     )
