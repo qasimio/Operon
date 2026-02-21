@@ -1,4 +1,5 @@
 # tools/shell_tools.py
+from agent.logger import log
 import subprocess
 from typing import Dict
 
@@ -13,6 +14,11 @@ def run_tests(repo_root: str, test_command: str = "pytest -q") -> Dict:
             capture_output=True,
             text=True
         )
+        if result.returncode == 0:
+            log.info("Tests passed successfully.")
+        else:
+            log.error("Tests FAILED.")
+            log.debug(f"Test Stderr:\n{result.stderr}")
         return {
             "success": result.returncode == 0,
             "stdout": result.stdout,

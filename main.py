@@ -5,16 +5,11 @@ from agent.logger import log
 if __name__ == "__main__":
     state = AgentState(
 
-    goal="""You have two tasks: 
-    (1. at the very top of agent/loop.py, alongside other imports add:
-    from agent.logger import log)
+    goal="""
+    Modify the `_rewrite_function` function in `agent/loop.py`,
+    right before calling LLM:
+    log.debug(f"LLM Prompt for rewrite:\n{prompt}".
 
-    (2. Modify the `run_agent` function in `agent/loop.py`.
-    Right after the variable `action` is decided, add the following two lines:
-    log.info(f"Executing action: {action.get('action')}")
-    log.debug(f"Full state payload: {action}"))
-     
-    Ensure both lines use the correct indentation level inside the function.
     Do not change anything else.
 """,
 
