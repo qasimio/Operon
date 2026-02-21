@@ -5,7 +5,7 @@ from agent.logger import log
 if __name__ == "__main__":
     state = AgentState(
         goal="""
-    Update the logger in agent/logger.py to output warnings in yellow using ANSI color codes.
+    Update the logger in agent/logger.py to only output warnings in yellow using ANSI color codes.
 """,
         repo_root="/home/UserX/Master/Operon"
     )
