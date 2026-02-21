@@ -232,8 +232,10 @@ def run_agent(state):
                 if full_path.exists():
                     code_to_modify = full_path.read_text(encoding="utf-8")
                 else:
-                    state.errors.append(f"File not found: {target_file}")
-                    state.done = True
+                    error_msg = f"File not found: {target_file}. You used the wrong path. Check the search results and try again (e.g., agent/logger.py)."
+                    state.errors.append(error_msg)
+                    state.observations.append({"error": error_msg})
+                    # DO NOT set state.done = True! Let it loop and try again.
                     continue
 
             obs = _rewrite_function(

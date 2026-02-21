@@ -21,7 +21,7 @@ def setup_logger(log_file="operon.log"):
         
         logger.addHandler(console_handler)
         logger.addHandler(file_handler)
-        
-    return logger
+
+        return logger
 
 log = setup_logger()
