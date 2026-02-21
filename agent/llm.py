@@ -25,7 +25,7 @@ def call_llm(prompt: str, require_json: bool = False) -> str:
         data = response.json()
 
         # Return a valid JSON string containing the error so the agent doesn't crash
-        log.debug(f"LLM Response Time/Tokens... (add any metadata here)")
+        # log.debug(f"LLM Response Time/Tokens... (add any metadata here)")
 
         return data["content"].strip()
     except Exception as e:

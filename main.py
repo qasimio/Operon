@@ -6,9 +6,9 @@ if __name__ == "__main__":
 
     state = AgentState(
         goal="""
-        Action: Inside smart_commit_pipeline, find the commit line (_run(["git", "commit", "-m", msg], repo_root)) and change it to this:
-        msg = f"[Operon Auto-Patch] {goal[:50].strip()}..."
-    _run(["git", "commit", "-m", msg], repo_root)
+    File: agent/llm.py
+Action: Find the call_llm function and delete or comment out the log.debug line inside it.
+(If you don't have agent/logger imported in llm.py anymore, you can just leave the file as-is, just make sure there are no print/log statements right before return data["content"].strip()).
 """,
         repo_root="/home/UserX/Master/Operon"
     )
