@@ -10,11 +10,11 @@ from agent.llm import call_llm
 from pathlib import Path
 import ast
 import time
+import re
 
 MAX_STEPS = 40
 
 def _detect_function_from_goal(goal, repo_root):
-    import re
     clean_goal = re.sub(r"[^\w\s]", " ", goal)
     words = clean_goal.split()
     for w in words:
@@ -81,10 +81,36 @@ def _rewrite_function(state, code_to_modify, file_path):
         if search_block.strip() == replace_block.strip():
             return {"success": False, "error": "REPLACE block is identical to SEARCH block. No changes made."}
 
+        # --- PREVIEW CODE CHANGES ---
+        print(f"\nFile: {file_path}\n")
+        print("CHANGE:")
+        print(search_block.strip())
+        print("→")
+        print(replace_block.strip())
+        print()
+        
+        approval = input("Approve? y/n: ").strip().lower()
+        if approval != 'y':
+            return {"success": False, "error": "User rejected the specific code change during preview."}
+
+        # --- APPLY PATCH ---
         patched_text = apply_patch(file_text, search_block, replace_block)
         
+        # --- WHITESPACE-NORMALIZED MATCHING FALLBACK ---
         if patched_text is None:
-            return {"success": False, "error": "SEARCH block did not exactly match the file content."}
+            log.warning("Strict match failed. Attempting whitespace-normalized matching...")
+            words = search_block.strip().split()
+            if words:
+                # Build regex that allows arbitrary spacing/newlines between all words
+                pattern = r'\s+'.join(re.escape(w) for w in words)
+                match = re.search(pattern, file_text)
+                if match:
+                    patched_text = file_text[:match.start()] + replace_block + file_text[match.end():]
+                    log.info("Whitespace-normalized match successful!")
+        
+        if patched_text is None:
+            return {"success": False, "error": "SEARCH block did not exactly match the file content, even with normalization."}
+        
         file_text = patched_text
 
     # SYNTAX SENTINEL
@@ -190,7 +216,6 @@ def run_agent(state):
             if not path:
                 state_done = True
                 continue
-
             obs = read_file(path, state.repo_root)
             state.observations.append(obs)
             
@@ -211,9 +236,10 @@ def run_agent(state):
                 state.action_log.append("FAILED to rewrite: No file specified.")
                 continue
 
-            if not ask_user_approval("rewrite_function", action):
-                state.action_log.append(f"User rejected patch for {target_file}.")
-                continue
+            # Bypass generic tool approval to rely on the granular diff preview inside _rewrite_function
+            # if not ask_user_approval("rewrite_function", action):
+            #     state.action_log.append(f"User rejected patch for {target_file}.")
+            #     continue
 
             code_to_modify = ""
             if target_func and target_func != "None":
