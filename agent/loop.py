@@ -132,24 +132,28 @@ def run_agent(state):
             state.done = True
             continue
 
-        # ================= PROGRAMMATIC LOOP BREAKER =================
+# ================= PROGRAMMATIC LOOP BREAKER =================
         last_dict = getattr(state, "last_action_dict", None)
         if last_dict == action:
             log.error(f"LOOP DETECTED: LLM repeated exact action: {action}")
             
-            # The "Hard Nudge"
-            override_msg = (
-                f"SYSTEM CRITICAL ERROR: You are stuck in a loop repeating {action}. "
-                "DO NOT SEARCH AGAIN. You already have a list of potential files. "
-                "Your IMMEDIATE NEXT STEP must be to use the 'read_file' tool on the most relevant file you found (e.g., 'agent/llm.py' or 'main.py')."
-            )
+            # Context-Aware Hard Nudge
+            act_name = action.get("action")
+            if act_name == "search_repo":
+                nudge = "DO NOT SEARCH AGAIN. You MUST use 'read_file' on the most promising file you found."
+            elif act_name == "read_file":
+                nudge = "DO NOT READ THE SAME FILE AGAIN. You MUST use 'rewrite_function' to modify the code, or use 'stop' if you are done."
+            elif act_name == "rewrite_function":
+                nudge = "DO NOT EDIT REPEATEDLY. You MUST use 'run_tests' to verify your changes, or 'stop' if the goal is met."
+            else:
+                nudge = "YOU ARE IN A LOOP. You MUST pick a completely different action."
+
+            override_msg = f"SYSTEM CRITICAL ERROR: You are stuck in a loop repeating {action}. {nudge}"
             
             state.observations.append({"error": override_msg})
             state.step_count += 1
             
-            # Optional: Clear some older history to prevent Context Poisoning
             if len(state.observations) > 10:
-                # Keep the first few (context) and the newest (the error), drop the spam in the middle
                 state.observations = state.observations[:3] + state.observations[-2:]
                 
             continue 

@@ -2,7 +2,7 @@ from agent.logger import log
 import requests
 import json
 
-URL = "http://127.0.0.1:8080/completion"
+URL = "http://127.0.0.1:9090/completion"
 
 def call_llm(prompt: str, require_json: bool = False) -> str:
     # ChatML format forces Instruct models to behave properly

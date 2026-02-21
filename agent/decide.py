@@ -11,17 +11,18 @@ def decide_next_action(state) -> dict:
     unique_mod = list(set(state.files_modified))
     
     # --- DYNAMIC STATE ENFORCEMENT ---
-    # We explicitly tell the 7B model what phase it is in so it doesn't guess.
     state_hint = ""
-    if state.last_action == "search_repo" and unique_read == []:
-        state_hint = "CRITICAL INSTRUCTION: You just searched the repo. You MUST now use 'read_file' on the most promising file you found."
-    elif state.last_action == "read_file" and unique_mod == []:
-        state_hint = "CRITICAL INSTRUCTION: You just read a file. You MUST now use 'rewrite_function' to make the requested changes to that file."
+    if state.last_action == "search_repo":
+        if "error" in recent_obs:
+            state_hint = "CRITICAL INSTRUCTION: Your last search failed. DO NOT search again. Pick a file from previous findings and use 'read_file'."
+        else:
+            state_hint = "CRITICAL INSTRUCTION: You just searched. You MUST now use 'read_file' on the best file found."
+    elif state.last_action == "read_file":
+        state_hint = "CRITICAL INSTRUCTION: You just read a file. You MUST now use 'rewrite_function' to make the required changes, or 'stop' if no changes are needed."
     elif state.last_action == "rewrite_function":
-        state_hint = "CRITICAL INSTRUCTION: You just edited a file. You MUST now use 'run_tests' to verify your changes, or 'stop' if no tests exist."
-    elif state.last_action == "search_repo" and "error" in recent_obs:
-        state_hint = "CRITICAL INSTRUCTION: Your last search failed or looped. DO NOT search again. You MUST pick a file from your previous findings and use 'read_file'."
-
+        state_hint = "CRITICAL INSTRUCTION: You just edited a file. You MUST now use 'run_tests' to verify changes, or 'stop' if you are completely finished."
+    elif state.last_action == "run_tests":
+        state_hint = "CRITICAL INSTRUCTION: You just ran tests. If they passed, you MUST use 'stop'. If they failed, use 'read_file' or 'rewrite_function' to fix the error."
     
 
     prompt = f'''You are Operon, an autonomous senior software engineer. Your goal is to fix code.
