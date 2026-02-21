@@ -71,8 +71,14 @@ def _rewrite_function(state, code_to_modify, file_path):
 
     file_text = full_path.read_text(encoding="utf-8")
 
-    # Apply all patches
+# Apply all patches
     for search_block, replace_block in blocks:
+        if search_block.strip() == replace_block.strip():
+            return {
+                "success": False,
+                "error": "The REPLACE block is identical to the SEARCH block. You made no changes. Read the goal again and provide actual modifications."
+            }
+
         patched_text = apply_patch(file_text, search_block, replace_block)
         
         if patched_text is None:

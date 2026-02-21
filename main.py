@@ -5,7 +5,7 @@ from agent.logger import log
 if __name__ == "__main__":
     state = AgentState(
         goal="""
-Update agent/logger.py to print a test string, but purposely forget to close the parenthesis on the print statement.
+python main.py "In agent/logger.py, add the word 'BROKEN' directly to the end of line 4 without using any quotes or comments."
 """,
         repo_root="/home/UserX/Master/Operon"
     )
