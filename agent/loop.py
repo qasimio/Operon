@@ -2,6 +2,7 @@ from tools.repo_search import search_repo
 from agent.approval import ask_user_approval
 from agent.decide import decide_next_action
 from agent.planner import make_plan
+from agent.logger import log
 from tools.fs_tools import read_file
 from tools.shell_tools import run_tests
 from tools.function_locator import find_function
@@ -52,12 +53,14 @@ def _rewrite_function(state, func_name, slice_data, file_path):
         ">>>>>>> REPLACE\n\n"
         "RULES:\n"
         "- The SEARCH block must EXACTLY match the existing code character-for-character.\n"
-        "- Keep the changes minimal. Do not replace the whole function.\n"
+        "- INDENTATION IS MANDATORY. You MUST include all leading spaces in the REPLACE block. If you drop the spaces, the code will break.\n"
         "- ONLY output the SEARCH/REPLACE block. No conversational text.\n"
+        "- Keep the changes minimal. Do not replace the whole function.\n"
     )
 
     raw_output = call_llm(prompt, require_json=False)
-
+    log.debug(f"Raw LLM Output:\n{raw_output}")
+    
     blocks = parse_search_replace(raw_output)
     if not blocks:
         return {
@@ -74,6 +77,7 @@ def _rewrite_function(state, func_name, slice_data, file_path):
     # Apply all patches
     for search_block, replace_block in blocks:
         patched_text = apply_patch(file_text, search_block, replace_block)
+        
         if patched_text is None:
             return {
                 "success": False,
@@ -113,8 +117,11 @@ def run_agent(state):
         if not state.files_read and loc and "file" in loc:
             action = {"action": "read_file", "path": loc["file"]}
 
-        elif func_name and loc and "file" in loc and state.files_read:
-            # Only auto-rewrite if we have already read a file to get context
+        # NEW: Only rewrite if we haven't already modified this file!
+        elif (func_name and loc and "file" in loc 
+            and state.files_read 
+            and loc["file"] not in state.files_modified
+            and not any(f"Failed to write {func_name}" in e for e in state.errors)):
             action = {
                 "action": "rewrite_function",
                 "function": func_name,
@@ -126,12 +133,14 @@ def run_agent(state):
         if not action:
             action = decide_next_action(state) or {}
 
-        print("DEBUG ACTION:", action)
-
+        # Validate action
         if not isinstance(action, dict) or "action" not in action:
-            print("FATAL: Invalid action dict. Ending loop.")
+            log.error("FATAL: Invalid action dict. Ending loop.")
             state.done = True
             continue
+
+        log.info(f"Executing action: {action.get('action')}")
+        log.debug(f"Full state payload: {action}")
 
         act = action.get("action")
         state.last_action = act
@@ -146,7 +155,6 @@ def run_agent(state):
                 continue
 
             obs = read_file(path, state.repo_root)
-
             state.observations.append(obs)
 
             if path not in state.files_read:
@@ -180,22 +188,40 @@ def run_agent(state):
 
             state.observations.append(obs)
 
+            # --- Centralized Logging & Git Commits for Patching ---
             if obs.get("success"):
+                log.info(f"Successfully patched {action['file']}")
+                
+                if action["file"] not in state.files_modified:
+                    state.files_modified.append(action["file"]) # Mark as done
+                
                 try:
                     from tools.git_tools import smart_commit_pipeline
                     smart_commit_pipeline(state.goal, state.repo_root)
                 except Exception:
                     pass
-
-            state.done = True
+            else:
+                log.error(f"Patch failed: {obs.get('error')}")
+                # Tell the state about the failure so the heuristic doesn't infinite loop!
+                state.errors.append(f"Failed to rewrite {func_name}: {obs.get('error')}")
+            # REMOVED state.done = True so the loop continues and the LLM can choose 'run_tests'
 
         # ================= TESTS =================
         elif act == "run_tests":
-
+            
+            log.info("Running test suite...")
             obs = run_tests(state.repo_root)
             state.observations.append(obs)
+            
+            # Additional terminal output so you know what happened
+            if obs.get("success"):
+                log.info("✅ Tests passed successfully.")
+            else:
+                log.error("❌ Tests FAILED.")
+                log.debug(f"Test Stderr:\n{obs.get('stderr')}")
 
         else:
+            log.info(f"Agent finished or chose unknown action: {act}")
             state.done = True
 
         time.sleep(0.2)
