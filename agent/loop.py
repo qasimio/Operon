@@ -30,15 +30,24 @@ def _rewrite_function(state, code_to_modify, file_path):
     prompt = (
         "You are Operon, a surgical code editor.\n"
         f"GOAL: {state.goal}\n\n"
+
+        "CRITICAL CONTEXT - READ CAREFULLY:\n"
+        f"You are CURRENTLY EDITING the file: `{file_path}`\n"
+        f"Even if the goal mentions multiple files or tasks, you must IGNORE them right now.\n"
+        f"Focus 100% ONLY on applying the necessary changes to `{file_path}`.\n"
+        "DO NOT output SEARCH/REPLACE blocks for any other files.\n\n"
+
         "CURRENT CODE TO MODIFY:\n"
         "```python\n"
         f"{code_to_modify}\n"
         "```\n\n"
+
         "INSTRUCTIONS:\n"
         "You must modify the code using a SEARCH/REPLACE block.\n"
         "1. Find the exact original lines you need to change.\n"
         "2. Output a SEARCH block with the exact original lines.\n"
         "3. Output a REPLACE block with the new lines.\n\n"
+
         "EXAMPLE OUTPUT FORMAT:\n"
         "<<<<<<< SEARCH\n"
         "    def hello_world():\n"
@@ -47,6 +56,7 @@ def _rewrite_function(state, code_to_modify, file_path):
         "    def hello_world():\n"
         "        print(\"hello, world!\")\n"
         ">>>>>>> REPLACE\n\n"
+
         "RULES:\n"
         "- The SEARCH block must EXACTLY match the existing code character-for-character.\n"
         "- INDENTATION IS MANDATORY. You MUST include all leading spaces in the REPLACE block. If you drop the spaces, the code will break.\n"
@@ -56,14 +66,10 @@ def _rewrite_function(state, code_to_modify, file_path):
 
     log.debug(f"LLM Prompt for rewrite:\n{prompt}")
     raw_output = call_llm(prompt, require_json=False)
-    log.debug(f"Raw LLM Output:\n{raw_output}")
     
     blocks = parse_search_replace(raw_output)
     if not blocks:
-        return {
-            "success": False, 
-            "error": f"LLM failed to output valid SEARCH/REPLACE blocks. RAW OUTPUT: {raw_output}"
-        }
+        return {"success": False, "error": f"LLM failed to output valid SEARCH/REPLACE blocks. RAW: {raw_output}"}
 
     full_path = Path(state.repo_root) / file_path
     if not full_path.exists():
@@ -71,30 +77,35 @@ def _rewrite_function(state, code_to_modify, file_path):
 
     file_text = full_path.read_text(encoding="utf-8")
 
-    # Apply all patches
     for search_block, replace_block in blocks:
+        if search_block.strip() == replace_block.strip():
+            return {"success": False, "error": "REPLACE block is identical to SEARCH block. No changes made."}
+
         patched_text = apply_patch(file_text, search_block, replace_block)
         
         if patched_text is None:
-            return {
-                "success": False,
-                "error": "SEARCH block did not exactly match the file content. LLM hallucinated code."
-            }
+            return {"success": False, "error": "SEARCH block did not exactly match the file content."}
         file_text = patched_text
 
-    # Write patched code back to disk
-    full_path.write_text(file_text, encoding="utf-8")
+    # SYNTAX SENTINEL
+    if file_path.endswith(".py"):
+        try:
+            ast.parse(file_text)
+        except SyntaxError as e:
+            error_msg = f"CRITICAL: SyntaxError! '{e.msg}' at line {e.lineno}. Rollback triggered."
+            log.error(f"Syntax check failed for {file_path}.")
+            return {"success": False, "error": error_msg}
 
-    return {
-        "success": True,
-        "file": file_path,
-        "message": f"Successfully applied {len(blocks)} patch(es)."
-    }
+    full_path.write_text(file_text, encoding="utf-8")
+    return {"success": True, "file": file_path, "message": f"Applied {len(blocks)} patch(es). Syntax valid."}
+
 
 def run_agent(state):
+    # Initialize robust Episodic Memory
+    if not hasattr(state, "action_log"):
+        state.action_log = []
 
     func_name, loc = _detect_function_from_goal(state.goal, state.repo_root)
-
     if func_name:
         slice_data = load_function_slice(state.repo_root, func_name)
         if slice_data:
@@ -102,135 +113,129 @@ def run_agent(state):
 
     if not getattr(state, "plan", None):
         state.plan = make_plan(state.goal, state.repo_root)
-
     print("\nPLAN:", state.plan, "\n")
 
     while not state.done and state.step_count < MAX_STEPS:
-
-        # ---------- LET DECIDE.PY DO ITS JOB ----------
-        # (We deleted the hardcoded heuristics block)
-        action = decide_next_action(state) or {}
+        decision = decide_next_action(state) or {}
+        
+        # Unpack ReAct decision
+        thought = decision.get("thought", "No thought process generated.")
+        action = decision.get("tool", {})
 
         if not isinstance(action, dict) or "action" not in action:
             log.error("FATAL: Invalid action dict. Ending loop.")
             state.done = True
             continue
 
-        # ================= PROGRAMMATIC LOOP BREAKER =================
-        last_dict = getattr(state, "last_action_dict", None)
-        if last_dict == action:
-            log.error(f"LOOP DETECTED: LLM repeated exact action: {action}")
-            
-            # Context-Aware Hard Nudge
-            act_name = action.get("action")
-            if act_name == "search_repo":
-                nudge = "DO NOT SEARCH AGAIN. You MUST use 'read_file' on the most promising file you found."
-            elif act_name == "read_file":
-                nudge = "DO NOT READ THE SAME FILE AGAIN. You MUST use 'rewrite_function' to modify the code, or use 'stop' if no changes are needed."
-            elif act_name == "rewrite_function":
-                nudge = "DO NOT EDIT REPEATEDLY. You MUST use 'run_tests' to verify your changes, or 'stop' if the goal is met."
-            else:
-                nudge = "YOU ARE IN A LOOP. You MUST pick a completely different action."
-
-            override_msg = f"SYSTEM CRITICAL ERROR: You are stuck in a loop repeating {action}. {nudge}"
-            
-            state.observations.append({"error": override_msg})
-            state.step_count += 1
-            
-            if len(state.observations) > 10:
-                state.observations = state.observations[:3] + state.observations[-2:]
-                
-            continue 
-            
-        # Save the action so we can check it next loop
-        state.last_action_dict = action
-        # =============================================================
-
-        log.info(f"Executing action: {action.get('action')}")
-        log.debug(f"Full state payload: {action}")
-
         act = action.get("action")
-        state.last_action = act
+
+        # Programmatic Loop Breaker (Checks the tool payload, ignoring the thought)
+        last_action_payload = getattr(state, "last_action_payload", None)
+        state.last_action_payload = action
         state.step_count += 1
-        
-        # ================= SEARCH REPO =================
-        if act == "search_repo":
-            query = action.get("query", "")
-            if not query:
-                log.error("Search query missing.")
-                state.done = True
+
+        if last_action_payload == action:
+            log.error(f"LOOP DETECTED: Agent repeated exact tool: {action}")
+            state.observations.append({"error": f"SYSTEM OVERRIDE: Loop detected. Do not repeat {action}."})
+            state.action_log.append(f"ERROR: Caught in a loop repeating '{act}'. System intervened.")
+            continue 
+
+        # --- LOGGING THE AGENT'S THOUGHT PROCESS ---
+        log.info(f"🧠 OPERON THOUGHT: {thought}")
+        log.info(f"⚙️ EXECUTING TOOL: {act}")
+        log.debug(f"Tool payload: {action}")
+
+        # ================= FINISH =================
+        if act == "finish":
+            # PREMATURE FINISH SAFEGUARD
+            if not getattr(state, "files_modified", []):
+                log.warning("Agent tried to finish without modifying any files! System override.")
+                state.observations.append({"error": "SYSTEM OVERRIDE: You tried to finish, but you haven't patched any files yet. You must use 'read_file' and then 'rewrite_function' to achieve the goal before finishing."})
+                state.action_log.append("ERROR: Attempted premature finish without any modifications.")
                 continue
             
-            log.info(f"Searching repo for: '{query}'")
-            hits = search_repo(state.repo_root, query)
+            # MULTI-FILE SAFEGUARD: Check if they read files they forgot to patch
+            files_read = getattr(state, "files_read", [])
+            files_modified = getattr(state, "files_modified", [])
+            if len(files_read) > len(files_modified):
+                unpatched = [f for f in files_read if f not in files_modified]
+                log.warning(f"Agent tried to finish but left files unpatched: {unpatched}")
+                state.observations.append({"error": f"SYSTEM OVERRIDE: You read these files but NEVER patched them: {unpatched}. Did you forget to use 'rewrite_function' on them? Review the GOAL and ensure ALL tasks are complete before finishing."})
+                state.action_log.append("ERROR: Attempted finish but left files unpatched.")
+                continue
+
+            msg = action.get('message', 'All tasks completed.')
+            log.info(f"✅ OPERON DECLARES VICTORY: {msg}")
+            state.action_log.append(f"Session Finished: {msg}")
+            state.done = True
+            break
+        
+        # ================= SEARCH REPO =================
+        elif act == "search_repo":
+            query = action.get("query", "")
+            hits = search_repo(state.repo_root, query) if query else []
             
             if hits:
-                log.info(f"Search found files: {hits}")
                 obs = {"search_results": f"Found query '{query}' in files: {hits}"}
+                state.action_log.append(f"Searched for '{query}'. Found {len(hits)} files.")
             else:
-                log.info(f"Search found NO files for '{query}'.")
                 obs = {"search_results": f"No matches found for '{query}'."}
+                state.action_log.append(f"Searched for '{query}'. Found 0 files.")
                 
             state.observations.append(obs)
-            log.debug(f"Search results: {obs}")
 
-        # ================= READ =================
+        # ================= READ FILE =================
         elif act == "read_file":
             path = action.get("path")
             if not path:
-                state.done = True
+                state_done = True
                 continue
 
             obs = read_file(path, state.repo_root)
             state.observations.append(obs)
-
-            if path not in state.files_read:
-                state.files_read.append(path)
+            
+            if "Error" in str(obs):
+                state.action_log.append(f"Attempted to read '{path}' but failed.")
+            else:
+                state.action_log.append(f"Read contents of file '{path}'.")
+                if path not in state.files_read:
+                    state.files_read.append(path)
 
         # ================= FUNCTION REWRITE =================
         elif act == "rewrite_function":
             target_file = action.get("file")
-            target_func = action.get("function") # The LLM's chosen function
-            
-            # Fallback to the heuristic's function name if the LLM left it blank
-            target_func = target_func or func_name
+            target_func = action.get("function") or func_name
 
             if not target_file:
                 state.errors.append("No file specified for rewrite.")
-                state.done = True
+                state.action_log.append("FAILED to rewrite: No file specified.")
                 continue
 
             if not ask_user_approval("rewrite_function", action):
-                state.done = True
+                state.action_log.append(f"User rejected patch for {target_file}.")
                 continue
 
-            # NEW: Try to get a slice, but fallback to the full file if not found/provided!
             code_to_modify = ""
-            if target_func:
+            if target_func and target_func != "None":
                 slice_data = load_function_slice(state.repo_root, target_func)
-                if slice_data:
-                    code_to_modify = slice_data["code"]
+                if slice_data: code_to_modify = slice_data["code"]
             
             if not code_to_modify:
-                # Read the full file instead
                 full_path = Path(state.repo_root) / target_file
                 if full_path.exists():
                     code_to_modify = full_path.read_text(encoding="utf-8")
                 else:
-                    state.errors.append(f"File not found: {target_file}")
-                    state.done = True
+                    error_msg = f"File not found: {target_file}"
+                    state.observations.append({"error": error_msg})
+                    state.action_log.append(f"FAILED to rewrite: {error_msg}")
                     continue
 
-            obs = _rewrite_function(
-                state,
-                code_to_modify,
-                target_file
-            )
-
-            state.observations.append(obs)
+            obs = _rewrite_function(state, code_to_modify, target_file)
 
             if obs.get("success"):
                 log.info(f"Successfully patched {target_file}")
+                # Inject success into the human-readable action log!
+                state.action_log.append(f"SUCCESS: Applied code patch to '{target_file}'.")
                 
                 if target_file not in state.files_modified:
                     state.files_modified.append(target_file) 
@@ -241,21 +246,17 @@ def run_agent(state):
                 except Exception:
                     pass
             else:
-                log.error(f"Patch failed: {obs.get('error')}")
-                error_msg = f"Failed to rewrite {target_func or target_file}: {obs.get('error')}"
-                state.errors.append(error_msg)
+                err = obs.get('error')
+                log.error(f"Patch failed: {err}")
+                state.action_log.append(f"FAILED patch on '{target_file}'. Error: {err}")
 
-# ================= STOP =================
-        elif act == "stop":
-            log.info("Agent has declared the goal met and requested to stop.")
-            state.done = True
+            state.observations.append(obs)
 
-        # ================= HALLUCINATION RECOVERY =================
+        # ================= HALLUCINATION =================
         else:
             log.warning(f"LLM hallucinated unknown action: {act}")
-            state.observations.append({
-                "error": f"SYSTEM OVERRIDE: '{act}' is NOT a valid action. You MUST strictly use one of these exact names: search_repo, read_file, rewrite_function, or stop."
-            })
+            state.action_log.append(f"Hallucinated invalid action: {act}")
+            state.observations.append({"error": f"SYSTEM OVERRIDE: '{act}' is NOT a valid tool."})
             time.sleep(1)
 
         time.sleep(0.2)

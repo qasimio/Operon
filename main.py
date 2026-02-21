@@ -5,7 +5,7 @@ from agent.logger import log
 if __name__ == "__main__":
     state = AgentState(
         goal="""
-    Update the logger in agent/logger.py to only output warnings in yellow using ANSI color codes.
+python main.py "Goal 1: In agent/loop.py, change the MAX_STEPS constant from 40 to 50. Goal 2: In agent/llm.py, change the max_tokens value in the payload from 1024 to 2048."
 """,
         repo_root="/home/UserX/Master/Operon"
     )

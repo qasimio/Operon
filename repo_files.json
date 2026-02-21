@@ -1,6 +1,6 @@
 {
   "main.py": {
-    "summary": "This file initializes an agent with a goal to update a logger to output warnings in yellow, starts a logging session, runs the agent, and logs the completion of the session.",
+    "summary": "This file initializes an agent with a goal and runs it, logging the process and final state.",
     "functions": [],
     "classes": [],
     "imports": [
@@ -18,7 +18,7 @@
     ]
   },
   "repo_tree.json": {
-    "summary": "This file, repo_tree.json, appears to be a JSON representation of the directory structure and files within a software repository, likely used for project management or automation purposes.",
+    "summary": "This file represents the directory structure of a software project, listing all files and subdirectories.",
     "functions": [],
     "classes": [],
     "imports": []
@@ -30,7 +30,7 @@
     "imports": []
   },
   "tools/function_locator.py": {
-    "summary": "This file defines a function `find_function` that searches a JSON file containing information about functions and classes in a repository, and returns the file path and line range for a specified function or class name.",
+    "summary": "This file defines a function `find_function` that searches for a function or class by name within a repository, returning the file path and line range if found.",
     "functions": [
       {
         "name": "find_function",
@@ -45,7 +45,7 @@
     ]
   },
   "tools/fs_tools.py": {
-    "summary": "This file provides functions to read from and write to files in a repository, handling errors and ensuring proper file modes.",
+    "summary": "This file provides functions to read from and write to files, handling paths relative to a repository root and managing file modes like append and overwrite.",
     "functions": [
       {
         "name": "read_file",
@@ -65,7 +65,7 @@
     ]
   },
   "tools/git_tools.py": {
-    "summary": "This file contains functions to interact with Git, including running Git commands, creating branches, and committing changes with an automated message.",
+    "summary": "This file contains functions to interact with Git, including running commands, checking the current branch, slugifying text, and automating a commit pipeline.",
     "functions": [
       {
         "name": "_run",
@@ -95,7 +95,7 @@
     ]
   },
   "tools/diff_engine.py": {
-    "summary": "This file contains functions to parse search and replace blocks from text, normalize lines for comparison, and apply patches to original text by finding and replacing matching blocks while handling indentation differences.",
+    "summary": "This file contains functions to parse search and replace blocks from text, normalize lines for comparison, and apply patches to original text by replacing matching blocks while handling indentation differences.",
     "functions": [
       {
         "name": "parse_search_replace",
@@ -119,7 +119,7 @@
     ]
   },
   "tools/build_brain.py": {
-    "summary": "This file initializes a repository brain by calling the `build_repo_brain` function with a specified directory path and an LLM (Language Model) function.",
+    "summary": "This file initializes a repository brain by calling a language model to process and understand the contents of a specified directory.",
     "functions": [],
     "classes": [],
     "imports": [
@@ -143,7 +143,7 @@
     ]
   },
   "tools/repo_brain.py": {
-    "summary": "Provides functions build_tree, extract_python_info, build_repo_brain, extract_python_structure_ast, Visitor.visit_FunctionDef and classes Visitor.",
+    "summary": "This file, `repo_brain.py`, builds a structured representation of a repository by extracting information about its Python files, including function and class definitions, imports, and generating short summaries of each file's content using a language model.",
     "functions": [
       {
         "name": "build_tree",
@@ -211,7 +211,7 @@
     ]
   },
   "tools/code_slice.py": {
-    "summary": "This file defines a function `load_function_slice` that loads and returns a slice of code around a specified function or class within a repository.",
+    "summary": "This file defines a function to load and return a slice of code around a specified function or class, including context lines.",
     "functions": [
       {
         "name": "load_function_slice",
@@ -241,12 +241,12 @@
     ]
   },
   "agent/decide.py": {
-    "summary": "This file defines a function `decide_next_action` that uses a language model to determine the next action for an autonomous software engineer based on the current state of the project, recent observations, and previous actions.",
+    "summary": "This file defines a function `decide_next_action` that uses a language model to determine the next action for an autonomous software engineer based on the current state of the task, recent observations, and available tools.",
     "functions": [
       {
         "name": "decide_next_action",
         "start": 6,
-        "end": 72
+        "end": 83
       }
     ],
     "classes": [],
@@ -258,7 +258,7 @@
     ]
   },
   "agent/planner.py": {
-    "summary": "This file defines a function `make_plan` that generates a list of high-level steps to achieve a given goal using a language model.",
+    "summary": "This file defines a function `make_plan` that takes a goal and a repository root as input, generates a plan using a language model, and returns up to six high-level logical steps to achieve the goal.",
     "functions": [
       {
         "name": "make_plan",
@@ -272,7 +272,7 @@
     ]
   },
   "agent/approval.py": {
-    "summary": "This file contains a function that prompts the user for approval to perform a specific action with given payload data.",
+    "summary": "This file contains a function that prompts the user to approve or deny an action with associated payload, returning a boolean value based on the user's response.",
     "functions": [
       {
         "name": "ask_user_approval",
@@ -284,7 +284,7 @@
     "imports": []
   },
   "agent/logger.py": {
-    "summary": "This file sets up a logger that writes debug and higher level messages to both the console and a file, with different formats for each output.",
+    "summary": "This file sets up a logger that writes debug and higher level messages to both the console and a file, with the console showing warnings and higher in yellow.",
     "functions": [
       {
         "name": "setup_logger",
@@ -299,7 +299,7 @@
     ]
   },
   "agent/loop.py": {
-    "summary": "This file contains functions and logic for detecting functions based on a goal, rewriting code to achieve that goal, and running an agent to execute a plan.",
+    "summary": "This file contains functions and logic for detecting functions based on a goal, rewriting functions in code, and running an agent to manage these tasks.",
     "functions": [
       {
         "name": "_detect_function_from_goal",
@@ -309,12 +309,12 @@
       {
         "name": "_rewrite_function",
         "start": 26,
-        "end": 92
+        "end": 122
       },
       {
         "name": "run_agent",
-        "start": 94,
-        "end": 263
+        "start": 125,
+        "end": 296
       }
     ],
     "classes": [],
@@ -338,7 +338,7 @@
     ]
   },
   "agent/llm.py": {
-    "summary": "This file defines a function `call_llm` that sends a prompt to a language model server, formats the response, and returns the result as a string or JSON object.",
+    "summary": "This file defines a function `call_llm` that sends a prompt to a language model server, formats the response, and returns the result.",
     "functions": [
       {
         "name": "call_llm",
@@ -368,7 +368,7 @@
     ]
   },
   ".pytest_cache/README.md": {
-    "summary": "This file is used by pytest to store cache data, allowing for faster test runs and the ability to rerun only failed tests.",
+    "summary": "This directory stores data from pytest's cache plugin, which helps with running tests more efficiently by caching results.",
     "functions": [],
     "classes": [],
     "imports": []
