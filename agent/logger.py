@@ -12,7 +12,7 @@ def setup_logger(log_file="operon.log"):
         # 1. Console Handler (What YOU see in the terminal: Clean & Concise)
         console_handler = logging.StreamHandler(sys.stdout)
         console_handler.setLevel(logging.INFO)
-        console_format = logging.Formatter('\033[94m[Operon]\033[0m %(message)s')
+        console_format = logging.Formatter('\033[93m[Operon]\033[0m %(message)s')
         console_handler.setFormatter(console_format)
         
         # 2. File Handler (What the LOG FILE sees: Deep Forensic Debugging)
