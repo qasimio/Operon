@@ -109,6 +109,8 @@ def run_agent(state):
 
     while not state.done and state.step_count < MAX_STEPS:
 
+        from agent.logger import log
+
         action = None
 
 # ---------- HEURISTICS (Try to fast-track obvious actions) ----------

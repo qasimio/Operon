@@ -12,6 +12,9 @@ if __name__ == "__main__":
 
     log.info(f"Executing action: {action.get('action')}")
     log.debug(f"Full state payload: {action}")
+     
+    and at the top of same file add:
+    from agent.logger import log
 
     Ensure both lines use the correct indentation level inside the function.
     Do not change anything else.
