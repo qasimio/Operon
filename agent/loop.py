@@ -107,32 +107,16 @@ def run_agent(state):
 
     while not state.done and state.step_count < MAX_STEPS:
 
-        action = None
-
-        # ---------- HEURISTICS (Try to fast-track obvious actions) ----------
-        if not state.files_read and loc and "file" in loc:
-            action = {"action": "read_file", "path": loc["file"]}
-
-        elif (func_name and loc and "file" in loc 
-              and state.files_read 
-              and loc["file"] not in state.files_modified 
-              and not any(f"Failed to rewrite {func_name}" in str(e) for e in state.errors)):
-            action = {
-                "action": "rewrite_function",
-                "function": func_name,
-                "file": loc["file"]
-            }
-
-# ---------- FALLBACK TO LLM ----------
-        if not action:
-            action = decide_next_action(state) or {}
+        # ---------- LET DECIDE.PY DO ITS JOB ----------
+        # (We deleted the hardcoded heuristics block)
+        action = decide_next_action(state) or {}
 
         if not isinstance(action, dict) or "action" not in action:
             log.error("FATAL: Invalid action dict. Ending loop.")
             state.done = True
             continue
 
-# ================= PROGRAMMATIC LOOP BREAKER =================
+        # ================= PROGRAMMATIC LOOP BREAKER =================
         last_dict = getattr(state, "last_action_dict", None)
         if last_dict == action:
             log.error(f"LOOP DETECTED: LLM repeated exact action: {action}")
@@ -142,9 +126,11 @@ def run_agent(state):
             if act_name == "search_repo":
                 nudge = "DO NOT SEARCH AGAIN. You MUST use 'read_file' on the most promising file you found."
             elif act_name == "read_file":
-                nudge = "DO NOT READ THE SAME FILE AGAIN. You MUST use 'rewrite_function' to modify the code, or use 'stop' if you are done."
+                nudge = "DO NOT READ THE SAME FILE AGAIN. You MUST use 'rewrite_function' to modify the code, or use 'stop' if no changes are needed."
             elif act_name == "rewrite_function":
                 nudge = "DO NOT EDIT REPEATEDLY. You MUST use 'run_tests' to verify your changes, or 'stop' if the goal is met."
+            elif act_name == "run_tests":
+                nudge = "DO NOT RUN TESTS REPEATEDLY. If they failed, read a file to fix the error. If they passed, you MUST use 'stop'."
             else:
                 nudge = "YOU ARE IN A LOOP. You MUST pick a completely different action."
 
@@ -168,7 +154,7 @@ def run_agent(state):
         act = action.get("action")
         state.last_action = act
         state.step_count += 1
-
+        
         # ================= SEARCH REPO =================
         if act == "search_repo":
             query = action.get("query", "")
