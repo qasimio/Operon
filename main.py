@@ -5,9 +5,7 @@ from agent.logger import log
 if __name__ == "__main__":
     state = AgentState(
         goal="""
-Goal 1: "In agent/logger.py, add comment on top that # Operon's first task done"
-after finishing
-Goal 2: "Inside "agent/repo.py" add comment # Chill, Operon can handle multiple tasks ;) in the end of file."
+python main.py "Goal 1: In agent/logger.py, change the file_handler logging level from DEBUG to INFO. Goal 2: In main.py, add a comment '# Multi-tasking unlocked' at the very bottom of the file."
 """,
         repo_root="/home/UserX/Master/Operon"
     )

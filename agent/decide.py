@@ -47,6 +47,7 @@ AVAILABLE TOOLS (Choose EXACTLY ONE):
 1. {{"action": "search_repo", "query": "actual keywords"}} 
 2. {{"action": "read_file", "path": "path/to/file.py"}} 
 3. {{"action": "rewrite_function", "file": "path/to/file.py", "function": "function_name"}} 
+   (Delegates actual coding. If you are adding code to the very end/bottom of a file, use "None" for the function name.)
 4. {{"action": "stop"}} 
 
 STRICT RULES FOR MULTI-TASKING:
