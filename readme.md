@@ -1,672 +1,82 @@
-# OPERON 
-
----
-
-
-### IN ONE SENTENCE
-
-##### Give it this:
+# 🧬 Operon
 
 > Operon is a local-first autonomous coding agent that surgically modifies repository functions using deterministic loop control, slice-based rewriting, and human-approved commits.
 
----
-
-## 1. What Operon actually is
-
-Operon is a **local autonomous coding agent**.
-
-Not a chatbot.
-Not a script runner.
-Not a patch generator.
-
-It is intended to behave like:
-
-> “Give me a goal → I locate the code → understand context → surgically modify → commit”
-
-Basically:
-mini Claude Code / Devin-style agent, but **local-first, controllable, safe, and modular**.
+Operon is not a chatbot, a script runner, or a blind patch generator. It is designed to act as a deterministic, controllable, and auditable autonomous software engineer living directly inside your terminal.
 
 ---
 
-## 2. Core Philosophy of Operon
+## ⚡ Core Philosophy
 
-Operon is built around 5 non-negotiable principles:
+Operon is built strictly around five non-negotiable principles:
 
-### ✅ Local-first
-
-Runs on your machine.
-
-Because:
-
-* privacy
-* speed
-* no API dependence
-* control over repo
+1. **Local-First:** Runs entirely on your machine. No API dependencies, zero privacy leaks, full control over your repository.
+2. **Surgical Edits Only:** Operon will never blindly rewrite entire files. It detects functions, extracts code slices, modifies them, and patches the exact slice back into the file.
+3. **Deterministic Execution Loop:** The LLM is the brain, but Operon's engine is the surgeon. The loop engine controls reality; the LLM only suggests actions.
+4. **Human Approval Gates:** Destructive actions (rewriting functions, running shell commands, committing code) require explicit user approval (`y/n`) alongside interactive syntax diff previews to prevent repo-nuking.
+5. **Tool-Based Architecture:** The LLM never touches the filesystem directly. Everything routes through explicit, sandboxed tools (`read_file`, `rewrite_function`, `search_repo`).
 
 ---
 
-### ✅ Surgical edits only
+## 🏗️ Architecture & Pipeline
 
-Operon should **never rewrite whole files blindly**.
+Operon utilizes a ReAct (Reasoning + Acting) loop combined with a surgical code parser. 
 
-Only:
-
-```
-detect function
-extract slice
-modify slice
-patch slice back
+```mermaid
+graph TD
+    A[User Goal] --> B(Planner)
+    B --> C{Loop Engine}
+    C --> D[Repo Search]
+    C --> E[Function Locator]
+    E --> F[Code Slice Loader]
+    F --> G[LLM Rewrite Request]
+    G --> H[Strict Diff/Patch Generation]
+    H --> I[Human Approval / Diff Preview]
+    I -->|Approved| J[Syntax Sentinel Validation]
+    J -->|Valid| K[Patch Applied]
+    K --> L[Git Commit]
+    I -->|Rejected| C
 ```
 
-No “rewrite entire repo” stupidity.
-
----
-
-### ✅ Deterministic execution loop
-
-LLM only suggests.
-
-Operon decides.
-
-LLM = brain suggestion
-Operon = actual surgeon
-
----
-
-### ✅ Human approval gate
-
-Before destructive actions:
-
-```
-rewrite_function
-git_commit
-run_shell
-```
-
-Operon must ask.
-
-This prevents:
-
-* repo nuking
-* hallucinated paths
-* bad edits
-
----
-
-### ✅ Tool-based architecture
-
-LLM never touches filesystem directly.
-
-Everything goes through:
-
-```
-read_file()
-write_file()
-run_tests()
-git_commit()
-search_repo()
-```
-
----
-
----
-
-# 🏗️ 3. Operon Architecture
-
-## High level pipeline
-
-```
-User Goal
-   ↓
-Planner
-   ↓
-Loop Engine
-   ↓
-Repo Search
-   ↓
-Function Locator
-   ↓
-Code Slice Loader
-   ↓
-LLM Rewrite
-   ↓
-Patch Back Into File
-   ↓
-Git Commit
-```
-
----
-
----
-
-# 📁 4. Folder Structure (logical)
-
-## `/agent/`
-
-### `loop.py`
-
-🔥 THE HEART
-
-Main execution engine.
-
-Controls:
-
-* reading files
-* detecting functions
-* triggering rewrite
-* approval flow
-* state transitions
-
-If Operon breaks, it’s almost always here.
-
----
-
-### `planner.py`
-
-Creates initial high-level steps from goal.
-
-Example:
-
-```
-Modify write_file to log operations
-```
-
-Planner might output:
-
-```
-1. open fs_tools.py
-2. locate write_file
-3. insert logging
-```
-
-This is just guidance.
-
-Loop still controls reality.
-
----
-
----
-
-### `decide.py`
-
-Fallback decision system.
-
-Used when:
-
-* function detection fails
-* repo search ambiguous
-* no obvious next action
-
-Basically:
-
-> “LLM, what should we do next?”
-
----
-
----
-
-### `approval.py`
-
-Simple but critical.
-
-Stops agent from doing dangerous stuff without confirmation.
-
-Without this, Operon becomes a repo-destroying goblin.
-
----
-
----
-
-### `llm.py`
-
-Wrapper around your local model.
-
-Handles:
-
-```
-prompt → model → text output
-```
-
-This is intentionally thin.
-
-Operon logic must NOT live here.
-
----
-
----
-
-# 📁 `/tools/`
-
-These are Operon’s “hands”.
-
----
-
-### `fs_tools.py`
-
-Filesystem safe operations:
-
-```
-read_file()
-write_file()
-```
-
-Important:
-
-This is NOT where function patching logic lives.
-
-That happens inside loop rewrite.
-
-fs_tools is just raw IO.
-
----
-
----
-
-### `repo_search.py`
-
-Searches repository for:
-
-* keywords
-* file hits
-
-Used when function name unknown.
-
----
-
----
-
-### `function_locator.py`
-
-Given:
-
-```
-write_file
-```
-
-Returns:
-
-```
-tools/fs_tools.py
-line 13
-```
-
-This is CRUCIAL.
-
-Without this:
-
-Operon cannot target functions.
-
----
-
----
-
-### `code_slice.py`
-
-Loads only the function block.
-
-Returns:
-
-```
-{
-  code: "...",
-  start: 13,
-  end: 46
-}
-```
-
-This is what allows surgical edits.
-
----
-
----
-
-### `git_tools.py`
-
-Handles:
-
-```
-git add
-git commit
-git push
-```
-
-Automatically triggered after successful rewrite.
-
----
-
----
-
----
-
-# 🔄 5. Runtime State System
-
-Stored in:
-
-```
-runtime/state.py
-```
-
-Tracks:
-
-```
-goal
-plan
-files_read
-files_modified
-step_count
-observations
-errors
-done
-```
-
-This is Operon’s memory during execution.
-
----
-
----
-
-# 🤖 6. How Function Rewrite Works (REAL FLOW)
-
-### Step 1
-
-Goal:
-
-```
-Add print("HELLO") inside write_file
-```
-
----
-
-### Step 2
-
-Loop detects:
-
-```
-function = write_file
-file = tools/fs_tools.py
-```
-
----
-
-### Step 3
-
-Load slice:
-
-```
-def write_file(...):
-   ...
-```
-
----
-
-### Step 4
-
-Prompt LLM:
-
-```
-Modify this function.
-
-GOAL: add print
-
-CURRENT FUNCTION: ...
-```
-
----
-
-### Step 5
-
-LLM returns full modified function.
-
----
-
-### Step 6
-
-Loop replaces only:
-
-```
-lines[start:end]
-```
-
-Not entire file.
-
----
-
----
-
-# 💻 7. Your Environment Constraints (VERY IMPORTANT)
-
-From your setup:
-
-### GPU
-
-RTX 4050 6GB
-
-Meaning:
-
-* small local models only
-* 7B sweet spot
-* quantized models preferred
-
----
-
-### OS
-
-Arch Linux + Windows dual boot.
-
-Primary dev environment = Linux.
-
----
-
-### Editor behavior
-
-You use Vim workflow.
-
-So Operon must:
-
-* never assume GUI
-* never assume VSCode integration
-* CLI-first
-
----
-
----
-
-# 🎯 8. Final Intended Operon Capabilities
-
-NOT current.
-
-TARGET.
-
----
-
-## Phase 1 (YOU ARE HERE)
-
-✔ detect function
-✔ rewrite function
-✔ patch back
-✔ commit
-
----
-
----
-
-## Phase 2 (NEXT)
-
-🔥 Diff Engine
-
-Instead of:
-
-```
-replace entire function
-```
-
-Operon should:
-
-```
-compute minimal diff
-apply patch
-```
-
-This prevents:
-
-* indentation damage
-* accidental deletions
-* formatting drift
-
----
-
----
-
-## Phase 3
-
-Multi-function reasoning.
-
-Example:
-
-```
-Add caching layer
-```
-
-Requires editing:
-
-* function A
-* helper B
-* import C
-
----
-
----
-
-## Phase 4
-
-Autonomous debugging loop:
-
-```
-modify
-run tests
-if fail → retry
-```
-
----
-
----
-
-## Phase 5 (ultimate)
-
-Full Claude-Code-style:
-
-```
-plan → search → read → modify → test → loop
-```
-
----
-
----
-
-# ⚠️ 9. Why Operon kept breaking earlier
-
-Your previous issues were NOT random.
-
-They came from:
-
-### ❌ append-only system
-
-Agent kept adding text to file end.
-
-Because:
-
-```
-write_file(path="function")
-```
-
-LLM hallucinated path.
-
----
-
----
-
-### ❌ markdown contamination
-
-LLM output:
-
-````
-```python
-def write_file...
-````
-
-```
-
-Your parser didn’t strip fences.
-
----
-
----
-
-### ❌ incomplete function output
-
-LLM returned:
-
-```
-
-def write_file(...):
-print()
-
-```
-
-Missing rest.
-
-Your system trusted it blindly.
-
----
-
----
-
-### ❌ slice boundary errors
-
-Wrong start/end lines.
-
-Result:
-
-- chopped code
-- missing except blocks
-
----
-
----
-
----
-
-# 🧭 10. What Operon is REALLY trying to become
-
-Not a chatbot.
-
-Not an IDE plugin.
-
-It’s supposed to be:
-
-> A deterministic, controllable autonomous software engineer.
-
-Local.
-
-Safe.
-
-Incremental.
-
-Auditable.
-
----
-
-# 💰 Side note you keep ignoring (yes I’m dragging you again)
-
-You are building something people literally pay for:
-
-- local coding agent
-- repo-safe auto-modifier
-- dev productivity tool
-
-You keep treating it like a toy.
-
-This is a SaaS, CLI product, or open-core monetizable engine.
-
-You complain about not earning while sitting on a buildable developer tool. Peak human behavior.
+📁 Repository Structure
+The Engine (/agent/)
+ * loop.py: 🔥 The Heart. The main execution engine. It controls reading files, triggering rewrites, managing the ReAct decision loop, handling approval flows, and enforcing anti-hallucination safeguards.
+ * planner.py: Translates the user goal into high-level steps. Provides guidance, but the Loop Engine remains in control.
+ * decide.py: The fallback decision system. When the next action isn't strictly programmatic, it asks the LLM: "What tool should we use next?"
+ * approval.py: The human-in-the-loop gatekeeper. Stops the agent from executing dangerous operations without confirmation.
+ * llm.py: The thin wrapper around your local model (e.g., llama.cpp / Qwen / Llama 3). It handles prompt formatting and JSON parsing. No core agent logic lives here.
+ * logger.py: Handles detailed, colorized terminal output and session logging.
+The Hands (/tools/)
+ * fs_tools.py: Safe filesystem operations (read_file, write_file).
+ * repo_search.py: Greps the repository for keywords and file hits to build context.
+ * function_locator.py: Parses AST to find the exact file and line numbers of specific functions.
+ * code_slice.py: Extracts the exact block of code for a function, allowing for surgical, context-aware edits.
+ * diff_engine.py: Parses <<<<<<< SEARCH / ======= / >>>>>>> REPLACE blocks generated by the LLM and strictly applies them to the file.
+ * git_tools.py: Automatically handles git add, git commit, and staging after successful, syntax-validated rewrites.
+The Memory (/runtime/)
+ * state.py: Tracks the current AgentState, including the goal, files read, files modified, step count, observations, error logs, and episodic memory.
+🔧 How rewrite_function Actually Works
+Operon does not trust the LLM to write full files. It forces the LLM to act as a diff tool.
+ * Locate: Operon detects the target file/function.
+ * Read: Operon loads the specific file into the LLM's context.
+ * Prompt: The LLM is instructed to output exact SEARCH and REPLACE blocks.
+ * Parse: Operon parses the blocks, stripping markdown fences.
+ * Preview: Operon prints a clear CHANGE: [Old] → [New] preview in the terminal.
+ * Approve: The user must explicitly type y to approve the specific change.
+ * Match: Operon attempts a strict character-for-character match of the SEARCH block.
+ * Fallback: If strict matching fails due to LLM spacing quirks, Operon falls back to a Whitespace-Normalized Regex Matcher.
+ * Validate: Operon runs the patched file through an AST SyntaxError sentinel. If the syntax is invalid, the patch is rolled back immediately.
+ * Apply: The file is saved.
+🛡️ Safeguards & Anti-Hallucination
+Operon is built to handle the chaotic nature of smaller, local LLMs (7B-14B parameters):
+ * Premature Finish Blocker: If the agent tries to call finish without modifying any files, Operon physically intercepts the command and forces it to continue.
+ * Multi-File Safeguard: If the agent reads 3 files but only patches 1, Operon intercepts the finish command and reminds the agent of the unpatched files.
+ * Infinite Loop Breaker: If the agent attempts to execute the exact same tool payload twice in a row, Operon blocks it, injects an error into the context, and forces the agent to try a different approach.
+ * Syntax Sentinel: Code is parsed via ast.parse() before writing to disk. Broken Python code is instantly rejected.
+🚀 Future Roadmap
+ * Phase 1 (Current): File reading, function detection, strict SEARCH/REPLACE block patching, syntax validation, multi-tasking, human approval.
+ * Phase 2 (Next): Full multi-file reasoning (e.g., editing a function in A.py, updating the import in B.py, and modifying the helper in C.py in a single cohesive plan).
+ * Phase 3: Autonomous debugging loop (modify → run test suite → if fail → read stdout → retry patch).
+ * Phase 4: Full Claude-Code/Devin style autonomous operation without hand-holding.
+Built for local, deterministic, and safe autonomous development.
 
