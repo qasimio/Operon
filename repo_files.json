@@ -8,6 +8,20 @@
       "run_agent"
     ]
   },
+  "tests.py": {
+    "summary": "Provides functions test_diff_engine and classes .",
+    "functions": [
+      {
+        "name": "test_diff_engine",
+        "start": 3,
+        "end": 23
+      }
+    ],
+    "classes": [],
+    "imports": [
+      "apply_patch"
+    ]
+  },
   "readme.md": {
     "summary": "Provides functions  and classes .",
     "functions": [],
@@ -44,7 +58,7 @@
     ]
   },
   "tools/fs_tools.py": {
-    "summary": "Just a simple explanation.\n\n:",
+    "summary": "Provides functions read_file, write_file and classes .",
     "functions": [
       {
         "name": "read_file",
@@ -54,7 +68,7 @@
       {
         "name": "write_file",
         "start": 13,
-        "end": 39
+        "end": 41
       }
     ],
     "classes": [],
@@ -108,8 +122,32 @@
       "re"
     ]
   },
+  "tools/diff_engine.py": {
+    "summary": "Provides functions parse_search_replace, _normalize_lines, apply_patch and classes .",
+    "functions": [
+      {
+        "name": "parse_search_replace",
+        "start": 3,
+        "end": 10
+      },
+      {
+        "name": "_normalize_lines",
+        "start": 12,
+        "end": 14
+      },
+      {
+        "name": "apply_patch",
+        "start": 16,
+        "end": 72
+      }
+    ],
+    "classes": [],
+    "imports": [
+      "re"
+    ]
+  },
   "tools/build_brain.py": {
-    "summary": "Provides functions  and classes .",
+    "summary": "Just one simple sentence.\n\nThis Python script uses functions to build a brain for a repository located at \"/home/UserX/Master/Operon/\" and calls an LLM (Large Language Model) to process the data.",
     "functions": [],
     "classes": [],
     "imports": [
@@ -236,14 +274,15 @@
       {
         "name": "decide_next_action",
         "start": 7,
-        "end": 92
+        "end": 104
       }
     ],
     "classes": [],
     "imports": [
       "call_llm",
       "json",
-      "re"
+      "re",
+      "json"
     ]
   },
   "agent/planner.py": {
@@ -283,12 +322,12 @@
       {
         "name": "_rewrite_function",
         "start": 25,
-        "end": 99
+        "end": 93
       },
       {
         "name": "run_agent",
-        "start": 100,
-        "end": 215
+        "start": 95,
+        "end": 210
       }
     ],
     "classes": [],
@@ -305,12 +344,12 @@
       "Path",
       "time",
       "Path",
-      "re",
+      "parse_search_replace",
       "smart_commit_pipeline"
     ]
   },
   "agent/llm.py": {
-    "summary": "Provides functions call_llm and classes .",
+    "summary": "Just one simple sentence.\n\n:",
     "functions": [
       {
         "name": "call_llm",
@@ -338,7 +377,7 @@
     ]
   },
   "runtime/state.py": {
-    "summary": "Just a single sentence.\n\nThis Python script defines a dataclass named `AgentState` that tracks the state of an AI worker, including its goal, repository root, plan, files read and modified, last action, observations, errors, step count, and whether it's done.\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\ns",
+    "summary": "Provides functions  and classes AgentState.",
     "functions": [],
     "classes": [
       {

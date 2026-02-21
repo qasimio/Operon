@@ -49,39 +49,52 @@ Requirements:
 
 Return JSON only.
 """
-        output = call_llm(prompt, require_json=True)
-
-        data = json.loads(output)
-        if data:
-            return data
-        # fallthrough if model didn't return JSON
 
     # General fallback prompt (no function context)
-    prompt = f"""
+    
+    # --- MEMORY COMPRESSION ---
+    # Only show the last 2 observations so we don't blow up the 8k VRAM context
+    recent_obs = state.observations[-2:] if state.observations else []
+    
+    # Deduplicate files read/modified to save tokens
+    unique_read = list(set(state.files_read))
+    unique_mod = list(set(state.files_modified))
+
+    prompt = f'''
 You are controlling an execution agent.
 
 Goal: {state.goal}
 Plan: {state.plan}
-Files read: {state.files_read}
-Files modified: {state.files_modified}
-Last action: {state.last_action}
+
+Context Summary:
+- Files read: {unique_read}
+- Files modified: {unique_mod}
+- Last action: {state.last_action}
+
+Recent Observations:
+{recent_obs}
 
 Decide the next action.
 
 Available actions:
 - read_file(path)
-- write_file(path, content)  # append by default unless mode=='overwrite'
+- write_file(path, content)
 - run_tests()
 - git_commit(message)
 - stop()
 
-Return JSON only.
-"""
+Return a JSON object with the "action" and required fields. Return ONLY valid JSON.
+'''
 
     output = call_llm(prompt, require_json=True)
-    data = json.loads(output)
-    if data:
-        return data
+    
+    import json
+    try:
+        data = json.loads(output)
+        if data:
+            return data
+    except Exception:
+        pass
 
     # safe fallback
     return {
