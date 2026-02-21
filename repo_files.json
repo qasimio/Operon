@@ -1,6 +1,6 @@
 {
   "main.py": {
-    "summary": "Just a single sentence describing the purpose of the script.\n\n:\n\n\n\n\n\n\n\n\n\n\n\ns\n\n\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns\ns",
+    "summary": "Provides functions  and classes .",
     "functions": [],
     "classes": [],
     "imports": [
@@ -44,7 +44,7 @@
     ]
   },
   "tools/fs_tools.py": {
-    "summary": "Just a simple statement describing the purpose of the file.\n\n:",
+    "summary": "Just a simple explanation.\n\n:",
     "functions": [
       {
         "name": "read_file",
@@ -54,7 +54,7 @@
       {
         "name": "write_file",
         "start": 13,
-        "end": 41
+        "end": 39
       }
     ],
     "classes": [],
@@ -122,8 +122,8 @@
     "functions": [
       {
         "name": "search_repo",
-        "start": 5,
-        "end": 29
+        "start": 4,
+        "end": 23
       }
     ],
     "classes": [],
@@ -216,17 +216,12 @@
     ]
   },
   "agent/tool_jail.py": {
-    "summary": "Provides functions _extract_json, validate_action and classes .",
+    "summary": "Provides functions validate_action and classes .",
     "functions": [
       {
-        "name": "_extract_json",
-        "start": 14,
-        "end": 25
-      },
-      {
         "name": "validate_action",
-        "start": 28,
-        "end": 49
+        "start": 14,
+        "end": 35
       }
     ],
     "classes": [],
@@ -236,17 +231,12 @@
     ]
   },
   "agent/decide.py": {
-    "summary": "Provides functions _extract_json, decide_next_action and classes .",
+    "summary": "Provides functions decide_next_action and classes .",
     "functions": [
       {
-        "name": "_extract_json",
-        "start": 7,
-        "end": 17
-      },
-      {
         "name": "decide_next_action",
-        "start": 20,
-        "end": 105
+        "start": 7,
+        "end": 92
       }
     ],
     "classes": [],
@@ -348,7 +338,7 @@
     ]
   },
   "runtime/state.py": {
-    "summary": "Provides functions  and classes AgentState.",
+    "summary": "Just a single sentence.\n\nThis Python script defines a dataclass named `AgentState` that tracks the state of an AI worker, including its goal, repository root, plan, files read and modified, last action, observations, errors, step count, and whether it's done.\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\ns",
     "functions": [],
     "classes": [
       {
