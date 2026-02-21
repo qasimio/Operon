@@ -160,8 +160,10 @@ def run_agent(state):
             
             # Format the hits so the LLM knows what it found
             if hits:
+                log.info(f"Search found files: {hits}")
                 obs = {"search_results": f"Found query '{query}' in files: {hits}"}
             else:
+                log.info(f"Search found NO files for '{query}'.")
                 obs = {"search_results": f"No matches found for '{query}'."}
                 
             state.observations.append(obs)
