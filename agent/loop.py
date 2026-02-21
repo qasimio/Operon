@@ -11,7 +11,7 @@ from agent.llm import call_llm
 from pathlib import Path
 import time
 
-MAX_STEPS = 30
+MAX_STEPS = 60
 
 def _detect_function_from_goal(goal, repo_root):
     # Strip ALL punctuation so we don't miss functions wrapped in backticks or quotes
