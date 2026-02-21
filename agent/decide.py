@@ -18,7 +18,10 @@ def decide_next_action(state) -> dict:
         else:
             state_hint = "Search successful. Now use 'read_file' on the exact file you need to edit."
     elif state.last_action == "read_file":
-        state_hint = "You just read a file. If you have the context you need, use 'rewrite_function' to apply the patch. If you are working on multiple tasks, do them ONE AT A TIME. Edit this file first before moving to the next."
+      if "error" in recent_obs.lower() or "not found" in recent_obs.lower():
+            state_hint = "CRITICAL: The file you tried to read was not found. DO NOT try to read it again. Look at your search results for the correct path, or move to the next task."
+      else:
+            state_hint = "You just read a file. If you have the context you need, use 'rewrite_function' to apply the patch. Focus ONLY on this file before moving to the next task."
     elif state.last_action == "rewrite_function":
         if "error" in recent_obs:
             state_hint = "CRITICAL: Your last edit failed (Check the SyntaxError or match error). You MUST use 'rewrite_function' again to fix your mistake."
