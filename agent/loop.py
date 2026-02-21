@@ -23,50 +23,47 @@ def _detect_function_from_goal(goal, repo_root):
             return w, loc
     return None, None
 
+
 def _rewrite_function(state, func_name, slice_data, file_path):
     from pathlib import Path
     from tools.diff_engine import parse_search_replace, apply_patch
     
     current_code = slice_data["code"]
 
-# -- prompt    
-    prompt = f'''
-You are Operon, a surgical code editor.
-GOAL: {state.goal}
-
-CURRENT FUNCTION TO MODIFY:
-```python
-{current_code}
-
-INSTRUCTIONS:
-You must modify the code using a SEARCH/REPLACE block.
-    Find the exact original lines you need to change.
-    Output a SEARCH block with the exact original lines.
-    Output a REPLACE block with the new lines.
-
-EXAMPLE OUTPUT FORMAT: <<<<<<< SEARCH def hello_world(): print("hello")
-
-def hello_world():
-    print("hello, world!")
-
-                            REPLACE
-
-RULES:
-
-    The SEARCH block must EXACTLY match the existing code character-for-character.
-
-    Keep the changes minimal. Do not replace the whole function.
-
-    ONLY output the SEARCH/REPLACE block. No conversational text.
-    '''
-
-
+    prompt = (
+        "You are Operon, a surgical code editor.\n"
+        f"GOAL: {state.goal}\n\n"
+        "CURRENT FUNCTION TO MODIFY:\n"
+        "```python\n"
+        f"{current_code}\n"
+        "```\n\n"
+        "INSTRUCTIONS:\n"
+        "You must modify the code using a SEARCH/REPLACE block.\n"
+        "1. Find the exact original lines you need to change.\n"
+        "2. Output a SEARCH block with the exact original lines.\n"
+        "3. Output a REPLACE block with the new lines.\n\n"
+        "EXAMPLE OUTPUT FORMAT:\n"
+        "<<<<<<< SEARCH\n"
+        "    def hello_world():\n"
+        "        print(\"hello\")\n"
+        "=======\n"
+        "    def hello_world():\n"
+        "        print(\"hello, world!\")\n"
+        ">>>>>>> REPLACE\n\n"
+        "RULES:\n"
+        "- The SEARCH block must EXACTLY match the existing code character-for-character.\n"
+        "- Keep the changes minimal. Do not replace the whole function.\n"
+        "- ONLY output the SEARCH/REPLACE block. No conversational text.\n"
+    )
 
     raw_output = call_llm(prompt, require_json=False)
 
     blocks = parse_search_replace(raw_output)
     if not blocks:
-        return {"success": False, "error": "LLM failed to output valid SEARCH/REPLACE blocks."}
+        return {
+            "success": False, 
+            "error": f"LLM failed to output valid SEARCH/REPLACE blocks. RAW OUTPUT: {raw_output}"
+        }
 
     full_path = Path(state.repo_root) / file_path
     if not full_path.exists():
@@ -75,27 +72,24 @@ RULES:
     file_text = full_path.read_text(encoding="utf-8")
 
     # Apply all patches
-
     for search_block, replace_block in blocks:
         patched_text = apply_patch(file_text, search_block, replace_block)
+        if patched_text is None:
+            return {
+                "success": False,
+                "error": "SEARCH block did not exactly match the file content. LLM hallucinated code."
+            }
+        file_text = patched_text
 
-    if patched_text is None:
-        return {
-    "success": False,
-    "error": "SEARCH block did not exactly match the file content. LLM hallucinated code."
-    }
-
-    file_text = patched_text
-
-#    Write patched code back to disk
-
+    # Write patched code back to disk
     full_path.write_text(file_text, encoding="utf-8")
 
     return {
-    "success": True,
-    "file": file_path,
-    "message": f"Successfully applied {len(blocks)} patch(es)."
+        "success": True,
+        "file": file_path,
+        "message": f"Successfully applied {len(blocks)} patch(es)."
     }
+
 
 def run_agent(state):
 

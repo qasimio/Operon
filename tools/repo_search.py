@@ -8,7 +8,8 @@ def search_repo(repo_root, query):
     with open(repo / "repo_files.json") as f:
         data = json.load(f)
 
-    hits = []
+print(f"Searching for: {query}")
+hits = []
 
     q = query.lower()
 
