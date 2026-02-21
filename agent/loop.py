@@ -82,14 +82,29 @@ def _rewrite_function(state, code_to_modify, file_path):
             }
         file_text = patched_text
 
+    # ========================================================
+    # 🛡️ THE SYNTAX SENTINEL (IN-MEMORY ROLLBACK)
+    # ========================================================
+    if file_path.endswith(".py"):
+        try:
+            # We try to parse the new code into an Abstract Syntax Tree BEFORE saving
+            ast.parse(file_text)
+        except SyntaxError as e:
+            # If it fails, we ABORT. The bad code never touches the hard drive.
+            error_msg = f"CRITICAL: Your patch introduced a Python SyntaxError! '{e.msg}' at line {e.lineno}. The rollback was triggered and the file was NOT saved. You MUST read the file again or rewrite the function with correct Python syntax."
+            log.error(f"Syntax check failed for {file_path}. Rollback triggered.")
+            return {"success": False, "error": error_msg}
+
+    # If we made it here, the syntax is perfectly valid!
     # Write patched code back to disk
     full_path.write_text(file_text, encoding="utf-8")
 
     return {
         "success": True,
         "file": file_path,
-        "message": f"Successfully applied {len(blocks)} patch(es)."
+        "message": f"Successfully applied {len(blocks)} patch(es). Syntax is valid."
     }
+
 
 def run_agent(state):
 
