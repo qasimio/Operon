@@ -20,7 +20,13 @@ def decide_next_action(state) -> dict:
     elif state.last_action == "read_file":
         state_hint = "CRITICAL INSTRUCTION: You just read a file. You MUST now use 'rewrite_function' to make the required changes, or 'stop' if no changes are needed."
     elif state.last_action == "rewrite_function":
-        state_hint = "CRITICAL INSTRUCTION: You just successfully delegated the edit to the sub-agent. The file has been updated! DO NOT edit the file again. You MUST now use 'stop'."
+        # ========================================
+        # MULTITASKING
+        # ========================================
+        if "error" in recent_obs:
+            state_hint = "CRITICAL INSTRUCTION: You last edit failed. Read the error and try 'rewrite_function' again to fix it."
+        else:
+            state_hint = "CRITICAL INSTRUCITON: You successfully updated a file. Evaluate the original GOAL. If there are other files or functions that still need editing to complete the goal, use 'search_repo' or 'read_file' to continue. If the goal is 100% complete across all files, you must use 'stop'."
 
     prompt = f'''You are Operon, an autonomous senior software engineer. Your goal is to manage tools to fix code.
 

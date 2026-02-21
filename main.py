@@ -5,7 +5,8 @@ from agent.logger import log
 if __name__ == "__main__":
     state = AgentState(
         goal="""
-python main.py "In agent/logger.py, add the word 'BROKEN' directly to the end of line 4 without using any quotes or comments.(it should not be inside any pre-existing line)"
+python main.py "In agent/logger.py, add the word 'BROKEN' exactly to the end of line 8 without using any quotes or comments.(it should not be inside any pre-existing line)"
+and add comment # Chill, Operon can handle multiple tasks ;) in the end of repo.py
 """,
         repo_root="/home/UserX/Master/Operon"
     )
