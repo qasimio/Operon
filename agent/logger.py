@@ -2,6 +2,8 @@
 import logging
 import sys
 
+# Operon's first task done
+
 def setup_logger(log_file="operon.log"):
     logger = logging.getLogger("Operon")
     logger.setLevel(logging.DEBUG) 
