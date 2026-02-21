@@ -5,7 +5,7 @@ from agent.logger import log
 if __name__ == "__main__":
     state = AgentState(
         goal="""
-python main.py "In agent/logger.py, add the word 'BROKEN' directly to the end of line 4 without using any quotes or comments."
+python main.py "In agent/logger.py, add the word 'BROKEN' directly to the end of line 4 without using any quotes or comments.(it should not be inside any pre-existing line)"
 """,
         repo_root="/home/UserX/Master/Operon"
     )
