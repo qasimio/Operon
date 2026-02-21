@@ -16,7 +16,8 @@
   "repo_tree.json",
   "runtime",
   "runtime/state.py",
-  "tests.py",
+  "tests",
+  "tests/tests_search.py",
   "tools",
   "tools/build_brain.py",
   "tools/code_slice.py",
@@ -26,5 +27,6 @@
   "tools/git_tools.py",
   "tools/repo_brain.py",
   "tools/repo_search.py",
+  "tools/run_tests.py",
   "tools/shell_tools.py"
 ]
