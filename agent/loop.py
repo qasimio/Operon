@@ -14,7 +14,6 @@ import time
 MAX_STEPS = 60
 
 def _detect_function_from_goal(goal, repo_root):
-    # Strip ALL punctuation so we don't miss functions wrapped in backticks or quotes
     import re
     clean_goal = re.sub(r"[^\w\s]", " ", goal)
     words = clean_goal.split()
@@ -24,19 +23,16 @@ def _detect_function_from_goal(goal, repo_root):
             return w, loc
     return None, None
 
-
-def _rewrite_function(state, func_name, slice_data, file_path):
+def _rewrite_function(state, code_to_modify, file_path):
     from pathlib import Path
     from tools.diff_engine import parse_search_replace, apply_patch
     
-    current_code = slice_data["code"]
-
     prompt = (
         "You are Operon, a surgical code editor.\n"
         f"GOAL: {state.goal}\n\n"
-        "CURRENT FUNCTION TO MODIFY:\n"
+        "CURRENT CODE TO MODIFY:\n"
         "```python\n"
-        f"{current_code}\n"
+        f"{code_to_modify}\n"
         "```\n\n"
         "INSTRUCTIONS:\n"
         "You must modify the code using a SEARCH/REPLACE block.\n"
@@ -58,6 +54,7 @@ def _rewrite_function(state, func_name, slice_data, file_path):
         "- Keep the changes minimal. Do not replace the whole function.\n"
     )
 
+    log.debug(f"LLM Prompt for rewrite:\n{prompt}")
     raw_output = call_llm(prompt, require_json=False)
     log.debug(f"Raw LLM Output:\n{raw_output}")
     
@@ -94,7 +91,6 @@ def _rewrite_function(state, func_name, slice_data, file_path):
         "message": f"Successfully applied {len(blocks)} patch(es)."
     }
 
-
 def run_agent(state):
 
     func_name, loc = _detect_function_from_goal(state.goal, state.repo_root)
@@ -117,11 +113,10 @@ def run_agent(state):
         if not state.files_read and loc and "file" in loc:
             action = {"action": "read_file", "path": loc["file"]}
 
-        # NEW: Only rewrite if we haven't already modified this file!
         elif (func_name and loc and "file" in loc 
-            and state.files_read 
-            and loc["file"] not in state.files_modified
-            and not any(f"Failed to write {func_name}" in e for e in state.errors)):
+              and state.files_read 
+              and loc["file"] not in state.files_modified 
+              and not any(f"Failed to rewrite {func_name}" in str(e) for e in state.errors)):
             action = {
                 "action": "rewrite_function",
                 "function": func_name,
@@ -129,11 +124,9 @@ def run_agent(state):
             }
 
         # ---------- FALLBACK TO LLM ----------
-        # If heuristics didn't trigger, or failed, LET THE LLM DECIDE
         if not action:
             action = decide_next_action(state) or {}
 
-        # Validate action
         if not isinstance(action, dict) or "action" not in action:
             log.error("FATAL: Invalid action dict. Ending loop.")
             state.done = True
@@ -147,7 +140,6 @@ def run_agent(state):
         state.step_count += 1
 
         # ================= SEARCH REPO =================
-
         if act == "search_repo":
             query = action.get("query", "")
             if not query:
@@ -158,7 +150,6 @@ def run_agent(state):
             log.info(f"Searching repo for: '{query}'")
             hits = search_repo(state.repo_root, query)
             
-            # Format the hits so the LLM knows what it found
             if hits:
                 log.info(f"Search found files: {hits}")
                 obs = {"search_results": f"Found query '{query}' in files: {hits}"}
@@ -170,9 +161,7 @@ def run_agent(state):
             log.debug(f"Search results: {obs}")
 
         # ================= READ =================
-
         elif act == "read_file":
-
             path = action.get("path")
             if not path:
                 state.done = True
@@ -186,38 +175,51 @@ def run_agent(state):
 
         # ================= FUNCTION REWRITE =================
         elif act == "rewrite_function":
+            target_file = action.get("file")
+            target_func = action.get("function") # The LLM's chosen function
+            
+            # Fallback to the heuristic's function name if the LLM left it blank
+            target_func = target_func or func_name
+
+            if not target_file:
+                state.errors.append("No file specified for rewrite.")
+                state.done = True
+                continue
 
             if not ask_user_approval("rewrite_function", action):
                 state.done = True
                 continue
 
-            if not func_name:
-                state.errors.append("Function name not detected")
-                state.done = True
-                continue
-
-            slice_data = load_function_slice(state.repo_root, func_name)
-
-            if not slice_data:
-                state.errors.append("Function slice missing")
-                state.done = True
-                continue
+            # NEW: Try to get a slice, but fallback to the full file if not found/provided!
+            code_to_modify = ""
+            if target_func:
+                slice_data = load_function_slice(state.repo_root, target_func)
+                if slice_data:
+                    code_to_modify = slice_data["code"]
+            
+            if not code_to_modify:
+                # Read the full file instead
+                full_path = Path(state.repo_root) / target_file
+                if full_path.exists():
+                    code_to_modify = full_path.read_text(encoding="utf-8")
+                else:
+                    state.errors.append(f"File not found: {target_file}")
+                    state.done = True
+                    continue
 
             obs = _rewrite_function(
                 state,
-                func_name,
-                slice_data,
-                action["file"]
+                code_to_modify,
+                target_file
             )
 
             state.observations.append(obs)
 
-            # --- Centralized Logging & Git Commits for Patching ---
             if obs.get("success"):
-                log.info(f"Successfully patched {action['file']}")
+                log.info(f"Successfully patched {target_file}")
                 
-                if action["file"] not in state.files_modified:
-                    state.files_modified.append(action["file"]) # Mark as done
+                if target_file not in state.files_modified:
+                    state.files_modified.append(target_file) 
                 
                 try:
                     from tools.git_tools import smart_commit_pipeline
@@ -226,18 +228,15 @@ def run_agent(state):
                     pass
             else:
                 log.error(f"Patch failed: {obs.get('error')}")
-                # Tell the state about the failure so the heuristic doesn't infinite loop!
-                state.errors.append(f"Failed to rewrite {func_name}: {obs.get('error')}")
-            # REMOVED state.done = True so the loop continues and the LLM can choose 'run_tests'
+                error_msg = f"Failed to rewrite {target_func or target_file}: {obs.get('error')}"
+                state.errors.append(error_msg)
 
         # ================= TESTS =================
         elif act == "run_tests":
-            
             log.info("Running test suite...")
             obs = run_tests(state.repo_root)
             state.observations.append(obs)
             
-            # Additional terminal output so you know what happened
             if obs.get("success"):
                 log.info("✅ Tests passed successfully.")
             else:
