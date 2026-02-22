@@ -11,7 +11,7 @@ from pathlib import Path
 import ast
 import time
 
-MAX_STEPS = 50
+MAX_STEPS = 40
 
 def _detect_function_from_goal(goal, repo_root):
     import re
