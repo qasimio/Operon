@@ -13,7 +13,7 @@ def call_llm(prompt: str, require_json: bool = False) -> str:
             {"role": "system", "content": "You are Operon, an elite autonomous AI software engineer. Think step-by-step. NEVER hallucinate task completion. You MUST explicitly use the 'rewrite_function' tool to modify a file before claiming it is patched."},
             {"role": "user", "content": prompt}
         ],
-        "max_tokens": 2048,
+        "max_tokens": 4096,
         "temperature": 0.1,
     }
     
