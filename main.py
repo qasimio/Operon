@@ -9,4 +9,4 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print("\nOperon shut down safely.")
         sys.exit(0)
-    # AssalamUAlaikum Qasim bhai - Men Operon
+    # Subscribe to Cooks Corner
