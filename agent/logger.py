@@ -18,7 +18,7 @@ class TUILogHandler(logging.Handler):
 
 def setup_logger(log_file="operon.log"):
     logger = logging.getLogger("Operon")
-    logger.setLevel(logging.INFO) 
+    logger.setLevel(logging.DEBUG) 
     
     if not logger.handlers:
         # File Handler: Keep the permanent record exactly as it was

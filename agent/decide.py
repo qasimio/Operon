@@ -58,7 +58,7 @@ EXAMPLE OUTPUT (DO NOT COPY THIS - IT IS JUST A FORMAT TEMPLATE):
 }}
 '''    
 
-    log.debug("Calling LLM to decide next action (ReAct mode)...")
+    log.info("Calling LLM to decide next action (ReAct mode)...")
     raw_output = call_llm(prompt, require_json=True)
     
     # Aggressive JSON cleanup
