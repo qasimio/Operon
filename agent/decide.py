@@ -12,7 +12,9 @@ def decide_next_action(state) -> dict:
 
     # --- DYNAMIC STATE ENFORCEMENT ---
     state_hint = ""
-    if state.last_action == "search_repo":
+    if "SYSTEM CRITICAL ERROR" in recent_obs:
+        state_hint = "🚨 CRITICAL: YOU ARE IN A LOOP! DO NOT repeat your last action. If you just read a file, you MUST use 'rewrite_function' to apply changes. If all tasks are done, use 'finish'."
+    elif state.last_action == "search_repo":
         if "error" in recent_obs.lower():
             state_hint = "Your search failed. Try a different query or read a file you already know about."
         else:
@@ -21,7 +23,7 @@ def decide_next_action(state) -> dict:
         if "error" in recent_obs.lower() or "not found" in recent_obs.lower():
             state_hint = "CRITICAL: The file you tried to read was not found. DO NOT try to read it again. Look at your search results for the correct path, or move to the next task."
         else:
-            state_hint = "You just read a file. If you have the context you need, use 'rewrite_function' to apply the patch. Focus ONLY on this file before moving to the next task."
+            state_hint = "You just read a file. You MUST NOW use 'rewrite_function' to apply the required changes to it. DO NOT read another file or search again until this file is modified."
     elif state.last_action == "rewrite_function":
         if "error" in recent_obs.lower():
             state_hint = "CRITICAL: Your last edit failed (Check the SyntaxError or match error). You MUST use 'rewrite_function' again to fix your mistake."
@@ -64,14 +66,13 @@ STRICT RULES FOR MULTI-TASKING:
 2. Knock out tasks sequentially. Read File A -> Rewrite File A -> Read File B -> Rewrite File B -> finish.
 3. DO NOT use 'finish' until EVERY part of the Goal has been achieved.
 4. Output ONLY valid, raw JSON. No markdown formatting.
-'''
+'''    
 
     log.debug("Calling LLM to decide next action...")
     raw_output = call_llm(prompt, require_json=True)
     
     # Aggressive JSON cleanup
     clean_json = re.sub(r"```(?:json)?\n?(.*?)\n?```", r"\1", raw_output, flags=re.DOTALL).strip()
-
     try:
         data = json.loads(clean_json)
         return data
