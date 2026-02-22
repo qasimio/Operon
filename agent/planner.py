@@ -33,4 +33,4 @@ STRICT RULES:
             "Finish"
         ]
 
-    return steps[:6]
+    return steps[:10]
