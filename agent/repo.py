@@ -1,6 +1,16 @@
 from pathlib import Path
 
 def build_repo_summary(repo_root: str, max_files: int = 15) -> str:
+    """
+    Builds a summary of the files in a repository.
+
+    Args:
+        repo_root (str): The root directory of the repository.
+        max_files (int, optional): The maximum number of files to include in the summary. Defaults to 15.
+
+    Returns:
+        str: A string containing the paths of the files in the repository, up to the maximum number specified.
+    """
     root = Path(repo_root)
     files = []
 
