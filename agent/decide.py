@@ -71,7 +71,7 @@ STRICT RULES FOR MULTI-TASKING:
     
     # Aggressive JSON cleanup
     clean_json = re.sub(r"```(?:json)?\n?(.*?)\n?```", r"\1", raw_output, flags=re.DOTALL).strip()
-    
+
     try:
         data = json.loads(clean_json)
         return data
@@ -80,4 +80,4 @@ STRICT RULES FOR MULTI-TASKING:
         # If it hallucinates garbage, force it to read the most likely file instead of killing the session
         if "agent/llm.py" not in unique_read:
             return {"action": "read_file", "path": "agent/llm.py"}
-        return {"action": "stop", "error": f"Failed to parse LLM JSON: {raw_output}"}
+        return {"action": "finish", "error": f"Failed to parse LLM JSON: {raw_output}"}
