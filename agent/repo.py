@@ -9,7 +9,7 @@ def build_repo_summary(repo_root: str, max_files: int = 15) -> str:
         max_files (int, optional): The maximum number of files to include in the summary. Defaults to 15.
 
     Returns:
-        str: A string containing the paths of the files in the repository, up to the maximum number specified.
+        str: A string containing the paths of the files in the repository, separated by newlines.
     """
     root = Path(repo_root)
     files = []

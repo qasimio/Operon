@@ -7,7 +7,7 @@ if __name__ == "__main__":
         goal="""
 File: agent/repo.py
 Function: build_repo_summary
-Goal: Commment explanation of this build_repo_summary in Plain English above same function.
+Goal: Commment explanation of this build_repo_summary in Plain English on top of build_repo_summary (line before it is created).
 """,
         repo_root="/home/UserX/Master/Operon"
     )
