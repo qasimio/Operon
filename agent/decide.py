@@ -16,7 +16,7 @@ def decide_next_action(state) -> dict:
     recent_obs = "\n".join([str(obs) for obs in state.observations[-2:]]) if state.observations else "None"
     plan_text = getattr(state, "plan", "No plan generated.")
 
-    prompt = f'''You are Operon, an elite autonomous AI software engineer. You have agency to explore, edit, and fix code.
+    prompt = f'''You are Operon, an elite autonomous AI software engineer. You have agency to explore, edit, and fix code. Your goal is to {state.goal}.
 
 [ORIGINAL GOAL]
 {state.goal}
@@ -64,12 +64,7 @@ EXAMPLE OUTPUT (DO NOT COPY THIS - IT IS JUST A FORMAT TEMPLATE):
     # Aggressive JSON cleanup
     clean_json = re.sub(r"```(?:json)?\n?(.*?)\n?```", r"\1", raw_output, flags=re.DOTALL).strip()
     try:
-        data = json.loads(clean_json)
-        # Ensure it matches the new schema
-        if "tool" not in data:
-            # Fallback if the LLM ignores the wrapper and just outputs the tool
-            return {"thought": "Auto-fallback: LLM omitted thought wrapper.", "tool": data}
-        return data
-    except Exception as e:
-        log.error(f"[JSON PARSE ERROR]: {str(e)}\nRaw output was: {raw_output}")
-        return {"thought": "JSON Parse Error.", "tool": {"action": "read_file", "path": "agent/llm.py"}}
+        return json.loads(clean_json)
+    except json.JSONDecodeError:
+        log.error(f"[JSON PARSE ERROR]: Could not parse cleaned JSON from LLM output: {clean_json}")
+        return {"thought": "Failed to parse JSON from LLM output.", "tool": {"action": "read_file", "path": "agent/llm.py"}}

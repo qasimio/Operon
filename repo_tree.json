@@ -1,12 +1,5 @@
 [
   ".gitignore",
-  ".pytest_cache",
-  ".pytest_cache/.gitignore",
-  ".pytest_cache/CACHEDIR.TAG",
-  ".pytest_cache/README.md",
-  ".pytest_cache/v",
-  ".pytest_cache/v/cache",
-  ".pytest_cache/v/cache/nodeids",
   "agent",
   "agent/approval.py",
   "agent/decide.py",
@@ -31,5 +24,7 @@
   "tools/function_locator.py",
   "tools/git_tools.py",
   "tools/repo_brain.py",
-  "tools/repo_search.py"
+  "tools/repo_search.py",
+  "tui",
+  "tui/app.py"
 ]
