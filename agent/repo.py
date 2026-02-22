@@ -10,4 +10,4 @@ def build_repo_summary(repo_root: str, max_files: int = 15) -> str:
             if len(files) >= max_files:
                 break
 
-    return "\n".join(files + ["..."])  # I am Operon with TUI
+    return "\n".join(files) 
