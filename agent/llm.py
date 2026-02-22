@@ -10,10 +10,10 @@ URL = "http://127.0.0.1:8080/v1/chat/completions"
 def call_llm(prompt: str, require_json: bool = False) -> str:
     payload = {
         "messages": [
-            {"role": "system", "content": "You are Operon, an elite autonomous AI software engineer. Think step-by-step and follow instructions perfectly."},
+            {"role": "system", "content": "You are Operon, an elite autonomous AI software engineer. Think step-by-step. NEVER hallucinate task completion. You MUST explicitly use the 'rewrite_function' tool to modify a file before claiming it is patched."},
             {"role": "user", "content": prompt}
         ],
-        "max_tokens": 1024,
+        "max_tokens": 4096,
         "temperature": 0.1,
     }
     

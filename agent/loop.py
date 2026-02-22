@@ -153,6 +153,16 @@ def run_agent(state):
                 state.observations.append({"error": "SYSTEM OVERRIDE: You tried to finish, but you haven't patched any files yet. You must use 'read_file' and then 'rewrite_function' to achieve the goal before finishing."})
                 state.action_log.append("ERROR: Attempted premature finish without any modifications.")
                 continue
+            
+            # MULTI-FILE SAFEGUARD: Check if they read files they forgot to patch
+            files_read = getattr(state, "files_read", [])
+            files_modified = getattr(state, "files_modified", [])
+            if len(files_read) > len(files_modified):
+                unpatched = [f for f in files_read if f not in files_modified]
+                log.warning(f"Agent tried to finish but left files unpatched: {unpatched}")
+                state.observations.append({"error": f"SYSTEM OVERRIDE: You read these files but NEVER patched them: {unpatched}. Did you forget to use 'rewrite_function' on them? Review the GOAL and ensure ALL tasks are complete before finishing."})
+                state.action_log.append("ERROR: Attempted finish but left files unpatched.")
+                continue
 
             msg = action.get('message', 'All tasks completed.')
             log.info(f"✅ OPERON DECLARES VICTORY: {msg}")
@@ -178,7 +188,7 @@ def run_agent(state):
         elif act == "read_file":
             path = action.get("path")
             if not path:
-                state.done = True
+                state_done = True
                 continue
 
             obs = read_file(path, state.repo_root)
