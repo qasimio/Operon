@@ -31,15 +31,11 @@ def decide_next_action(state) -> dict:
 [LATEST SYSTEM OBSERVATIONS / ERRORS]
 {recent_obs}
 
-[CRITICAL RULES TO PREVENT FAILURES]
-1. NEVER GIVE UP: If you see "ERROR" or "LOOP DETECTED" in the system observations, DO NOT use 'finish' to quit. You must try a DIFFERENT action to accomplish the goal.
-2. MEMORY OVERRIDE: If your ACTION HISTORY already shows you read a file, DO NOT use 'read_file' on it again. Proceed directly to using 'rewrite_function' on that file.
-3. NO PREMATURE FINISH: You are STRICTLY FORBIDDEN from using the 'finish' tool unless EVERY SINGLE PART of the ORIGINAL GOAL has a corresponding "SUCCESS" entry in the ACTION HISTORY.
-
 [YOUR TASK]
 1. Read the ACTION HISTORY strictly.
 2. Compare your history against the ORIGINAL GOAL.
-3. Determine the EXACT next tool to use.
+3. Determine if EVERY part of the goal is fully complete based ONLY on the ACTION HISTORY.
+4. Decide the exact next tool to use.
 
 AVAILABLE TOOLS:
 1. {{"action": "search_repo", "query": "search terms"}} 
@@ -67,7 +63,6 @@ EXAMPLE OUTPUT (DO NOT COPY THIS - IT IS JUST A FORMAT TEMPLATE):
     
     # Aggressive JSON cleanup
     clean_json = re.sub(r"```(?:json)?\n?(.*?)\n?```", r"\1", raw_output, flags=re.DOTALL).strip()
-
     try:
         data = json.loads(clean_json)
         # Ensure it matches the new schema
