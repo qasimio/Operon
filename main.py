@@ -16,6 +16,7 @@ python main.py "Goal 1: In agent/logger.py, change the file_handler logging leve
     log.info("="*50)
     log.info(f"Goal: {state.goal}")
     # Multi-tasking unlocked
+    # Multi-tasking unlocked
 
     final_state = run_agent(state)
 
