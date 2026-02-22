@@ -1,6 +1,7 @@
+# Replace top of tools/git_tools.py
 import subprocess
 import re
-
+from agent.logger import log
 
 def _run(cmd, cwd):
     r = subprocess.run(
@@ -9,13 +10,12 @@ def _run(cmd, cwd):
         capture_output=True,
         text=True
     )
-    print("GIT:", " ".join(cmd))
+    log.debug(f"GIT: {' '.join(cmd)}")
     if r.stdout:
-        print(r.stdout)
+        log.debug(r.stdout.strip())
     if r.stderr:
-        print(r.stderr)
+        log.debug(r.stderr.strip())
     return r
-
 
 
 def _current_branch(repo_root):

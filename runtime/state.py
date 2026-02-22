@@ -12,15 +12,9 @@ class AgentState:
     files_modified: List[str] = field(default_factory=list)
 
     last_action: Optional[str] = None
+    action_log: List[str] = field(default_factory=list)  # Added: Critical for episodic memory in decide.py
     observations: List[Dict[str, Any]] = field(default_factory=list)
     errors: List[str] = field(default_factory=list)
 
     step_count: int = 0
     done: bool = False
-
-
-
-"""
-Create a notebook for an AI worker that tracks its mission, the folder it's working in, the steps it plans, 
-the files it touched, what happened, mistakes, how many moves it made, and whether it's finished.
-"""

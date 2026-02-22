@@ -18,8 +18,6 @@ def write_file(path: str, content: str, repo_root: str, mode: str = "append") ->
         if mode not in ("append", "overwrite"):
             return {"success": False, "path": path, "error": f"invalid mode: {mode}"}
 
-        print("HELLO")  # Inserted line
-
         if mode == "append":
             # open in append mode (creates file if not exists)
             with full_path.open("a", encoding="utf-8") as f:

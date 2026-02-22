@@ -127,6 +127,10 @@ def _rewrite_function(state, code_to_modify, file_path):
 
 
 def run_agent(state):
+    from agent.tool_jail import ALLOWED_ACTIONS
+    import time
+    from pathlib import Path
+
     # Initialize robust Episodic Memory
     if not hasattr(state, "action_log"):
         state.action_log = []
@@ -140,65 +144,88 @@ def run_agent(state):
     if not getattr(state, "plan", None):
         state.plan = make_plan(state.goal, state.repo_root)
     print("\nPLAN:", state.plan, "\n")
+    log.info(f"[bold magenta]PLAN GENERATED:[/bold magenta] {state.plan}")
 
     while not state.done and state.step_count < MAX_STEPS:
         decision = decide_next_action(state) or {}
         
         # Unpack ReAct decision
         thought = decision.get("thought", "No thought process generated.")
-        action = decision.get("tool", {})
+        
+        # Flexibly handle if LLM output {"tool": {"action": "x"}} OR just {"action": "x"}
+        action_payload = decision.get("tool", decision)
 
-        if not isinstance(action, dict) or "action" not in action:
-            log.error("FATAL: Invalid action dict. Ending loop.")
-            state.done = True
+        if not isinstance(action_payload, dict) or "action" not in action_payload:
+            log.error("FATAL: Invalid action dict. LLM Hallucinated format.")
+            state.observations.append({"error": "SYSTEM OVERRIDE: Invalid JSON format. You MUST output a dictionary with an 'action' key."})
+            state.action_log.append("FAILED: LLM output did not contain a valid action.")
+            time.sleep(1)
             continue
 
-        act = action.get("action")
+        act = action_payload.get("action")
 
-        # Programmatic Loop Breaker (Checks the tool payload, ignoring the thought)
+        # ================= TOOL JAIL INTERCEPTION =================
+        if act not in ALLOWED_ACTIONS:
+            log.warning(f"Jail intercepted hallucinated tool: {act}")
+            state.observations.append({"error": f"SYSTEM OVERRIDE: '{act}' is not a valid tool. Allowed: {list(ALLOWED_ACTIONS.keys())}"})
+            state.action_log.append(f"FAILED: Hallucinated invalid tool '{act}'.")
+            time.sleep(1)
+            continue
+            
+        missing_fields = [f for f in ALLOWED_ACTIONS[act] if f not in action_payload]
+        if missing_fields:
+            err_msg = f"Tool '{act}' is missing required fields: {missing_fields}"
+            log.warning(f"Jail intercepted bad payload: {err_msg}")
+            state.observations.append({"error": f"SYSTEM OVERRIDE: {err_msg}"})
+            state.action_log.append(f"FAILED: {err_msg}")
+            time.sleep(1)
+            continue
+        # ==========================================================
+
+        # Programmatic Loop Breaker
         last_action_payload = getattr(state, "last_action_payload", None)
-        state.last_action_payload = action
+        state.last_action_payload = action_payload
         state.step_count += 1
 
-        if last_action_payload == action:
-            log.error(f"LOOP DETECTED: Agent repeated exact tool: {action}")
-            state.observations.append({"error": f"SYSTEM OVERRIDE: Loop detected. Do not repeat {action}."})
+        if last_action_payload == action_payload:
+            log.error(f"LOOP DETECTED: Agent repeated exact tool: {action_payload}")
+            state.observations.append({"error": f"SYSTEM OVERRIDE: Loop detected. You just tried to do exactly {action_payload} again. Do something else."})
             state.action_log.append(f"ERROR: Caught in a loop repeating '{act}'. System intervened.")
+            time.sleep(1)
             continue 
 
         # --- LOGGING THE AGENT'S THOUGHT PROCESS ---
         log.info(f"🧠 OPERON THOUGHT: {thought}")
         log.info(f"⚙️ EXECUTING TOOL: {act}")
-        log.debug(f"Tool payload: {action}")
+        log.debug(f"Tool payload: {action_payload}")
 
-        # ================= FINISH =================
+        # ================= ROUTING =================
         if act == "finish":
             # PREMATURE FINISH SAFEGUARD
             if not getattr(state, "files_modified", []):
                 log.warning("Agent tried to finish without modifying any files! System override.")
-                state.observations.append({"error": "SYSTEM OVERRIDE: You tried to finish, but you haven't patched any files yet. You must use 'read_file' and then 'rewrite_function' to achieve the goal before finishing."})
+                state.observations.append({"error": "SYSTEM OVERRIDE: You tried to finish, but you haven't patched any files yet. You must use 'rewrite_function' to achieve the goal before finishing."})
                 state.action_log.append("ERROR: Attempted premature finish without any modifications.")
                 continue
             
-            # MULTI-FILE SAFEGUARD: Check if they read files they forgot to patch
+            # MULTI-FILE SAFEGUARD
             files_read = getattr(state, "files_read", [])
             files_modified = getattr(state, "files_modified", [])
             if len(files_read) > len(files_modified):
                 unpatched = [f for f in files_read if f not in files_modified]
-                log.warning(f"Agent tried to finish but left files unpatched: {unpatched}")
-                state.observations.append({"error": f"SYSTEM OVERRIDE: You read these files but NEVER patched them: {unpatched}. Did you forget to use 'rewrite_function' on them? Review the GOAL and ensure ALL tasks are complete before finishing."})
+                log.warning(f"Agent left files unpatched: {unpatched}")
+                state.observations.append({"error": f"SYSTEM OVERRIDE: You read these files but NEVER patched them: {unpatched}. Did you forget to use 'rewrite_function'?"})
                 state.action_log.append("ERROR: Attempted finish but left files unpatched.")
                 continue
 
-            msg = action.get('message', 'All tasks completed.')
+            msg = action_payload.get('message', 'All tasks completed.')
             log.info(f"✅ OPERON DECLARES VICTORY: {msg}")
             state.action_log.append(f"Session Finished: {msg}")
             state.done = True
             break
         
-        # ================= SEARCH REPO =================
         elif act == "search_repo":
-            query = action.get("query", "")
+            query = action_payload.get("query", "")
             hits = search_repo(state.repo_root, query) if query else []
             
             if hits:
@@ -210,36 +237,29 @@ def run_agent(state):
                 
             state.observations.append(obs)
 
-        # ================= READ FILE =================
         elif act == "read_file":
-            path = action.get("path")
+            path = action_payload.get("path")
             if not path:
                 state_done = True
                 continue
             obs = read_file(path, state.repo_root)
             state.observations.append(obs)
             
-            if "Error" in str(obs):
-                state.action_log.append(f"Attempted to read '{path}' but failed.")
+            if "error" in obs:
+                state.action_log.append(f"Attempted to read '{path}' but failed: {obs['error']}")
             else:
                 state.action_log.append(f"Read contents of file '{path}'.")
                 if path not in state.files_read:
                     state.files_read.append(path)
 
-        # ================= FUNCTION REWRITE =================
         elif act == "rewrite_function":
-            target_file = action.get("file")
-            target_func = action.get("function") or func_name
+            target_file = action_payload.get("file")
+            target_func = action_payload.get("function") or func_name
 
             if not target_file:
-                state.errors.append("No file specified for rewrite.")
-                state.action_log.append("FAILED to rewrite: No file specified.")
+                state.observations.append({"error": "rewrite_function requires a 'file' parameter"})
+                state.action_log.append("FAILED: rewrite_function missing 'file' parameter")
                 continue
-
-            # Bypass generic tool approval to rely on the granular diff preview inside _rewrite_function
-            # if not ask_user_approval("rewrite_function", action):
-            #     state.action_log.append(f"User rejected patch for {target_file}.")
-            #     continue
 
             code_to_modify = ""
             if target_func and target_func != "None":
@@ -260,7 +280,6 @@ def run_agent(state):
 
             if obs.get("success"):
                 log.info(f"Successfully patched {target_file}")
-                # Inject success into the human-readable action log!
                 state.action_log.append(f"SUCCESS: Applied code patch to '{target_file}'.")
                 
                 if target_file not in state.files_modified:
@@ -277,13 +296,6 @@ def run_agent(state):
                 state.action_log.append(f"FAILED patch on '{target_file}'. Error: {err}")
 
             state.observations.append(obs)
-
-        # ================= HALLUCINATION =================
-        else:
-            log.warning(f"LLM hallucinated unknown action: {act}")
-            state.action_log.append(f"Hallucinated invalid action: {act}")
-            state.observations.append({"error": f"SYSTEM OVERRIDE: '{act}' is NOT a valid tool."})
-            time.sleep(1)
 
         time.sleep(0.2)
 
