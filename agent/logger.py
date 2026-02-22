@@ -15,7 +15,7 @@ def setup_logger(log_file="operon.log"):
         
         # File Handler: Overwrite mode ('w') so it resets every run! No more 3000 lines.
         file_handler = logging.FileHandler(log_file, encoding='utf-8', mode='w')
-        file_handler.setLevel(logging.INFO)
+        file_handler.setLevel(logging.DEBUG)
         file_format = logging.Formatter('%(asctime)s | %(levelname)-8s | %(module)s | %(message)s')
         file_handler.setFormatter(file_format)
         
