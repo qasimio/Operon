@@ -27,43 +27,24 @@ def _detect_function_from_goal(goal, repo_root):
 def _rewrite_function(state, code_to_modify, file_path):
     from pathlib import Path
     from tools.diff_engine import parse_search_replace, apply_patch
+    from agent.approval import ask_user_approval
     
     prompt = (
-        "You are Operon, a surgical code editor.\n"
+        "You are Operon, an elite surgical code editor.\n"
         f"GOAL: {state.goal}\n\n"
-
-        "CRITICAL CONTEXT - READ CAREFULLY:\n"
-        f"You are CURRENTLY EDITING the file: `{file_path}`\n"
-        f"Even if the goal mentions multiple files or tasks, you must IGNORE them right now.\n"
-        f"Focus 100% ONLY on applying the necessary changes to `{file_path}`.\n"
-        "DO NOT output SEARCH/REPLACE blocks for any other files.\n\n"
-
-        "CURRENT CODE TO MODIFY:\n"
-        "```python\n"
-        f"{code_to_modify}\n"
-        "```\n\n"
-
+        "CRITICAL CONTEXT:\n"
+        f"You are editing: `{file_path}`\n\n"
+        "CURRENT CODE:\n"
+        f"```python\n{code_to_modify}\n```\n\n"
         "INSTRUCTIONS:\n"
-        "You must modify the code using a SEARCH/REPLACE block.\n"
-        "1. Find the exact original lines you need to change.\n"
-        "2. Output a SEARCH block with the exact original lines.\n"
-        "3. Output a REPLACE block with the new lines.\n\n"
-
-        "EXAMPLE OUTPUT FORMAT:\n"
-        "<<<<<<< SEARCH\n"
-        "    def hello_world():\n"
-        "        print(\"hello\")\n"
-        "=======\n"
-        "    def hello_world():\n"
-        "        print(\"hello, world!\")\n"
-        ">>>>>>> REPLACE\n\n"
-
+        "1. Output a SEARCH block matching the exact original lines.\n"
+        "2. Output a REPLACE block with the new lines.\n"
+        "3. CRITICAL: If the user asks you to replace MULTIPLE occurrences of something, or perform MULTIPLE distinct tasks (like adding an import AND changing a function), you MUST output MULTIPLE separate <<<<<<< SEARCH / >>>>>>> REPLACE blocks. Do not stop until ALL requirements of the goal are met in this file.\n\n"
+        "EXAMPLE FORMAT:\n"
+        "<<<<<<< SEARCH\noriginal code\n=======\nnew code\n>>>>>>> REPLACE\n\n"
         "RULES:\n"
-        "- The SEARCH block must EXACTLY match the existing code character-for-character.\n"
-        "- INDENTATION IS MANDATORY. You MUST include all leading spaces in the REPLACE block. If you drop the spaces, the code will break.\n"
-        "- ONLY output the SEARCH/REPLACE block. No conversational text.\n"
-        "- You can output MULTIPLE SEARCH/REPLACE blocks if you need to change mulitple different parts of the same or different files (e.g., adding an import at top AND changing a function at the bottom).\n"
-        "- Keep the changes minimal. Do not replace the whole function.\n"
+        "- SEARCH block must EXACTLY match character-for-character.\n"
+        "- INDENTATION IS MANDATORY.\n"
     )
 
     log.debug(f"LLM Prompt for rewrite:\n{prompt}")
@@ -71,47 +52,55 @@ def _rewrite_function(state, code_to_modify, file_path):
     
     blocks = parse_search_replace(raw_output)
     if not blocks:
-        return {"success": False, "error": f"LLM failed to output valid SEARCH/REPLACE blocks. RAW: {raw_output}"}
+        return {"success": False, "error": "LLM failed to output valid SEARCH/REPLACE blocks."}
+
+    for search_block, replace_block in blocks:
+        payload = {
+            "file": file_path,
+            "search": search_block.strip(),
+            "replace": replace_block.strip()
+        }
+    
+    if not ask_user_approval("rewrite_function", payload):
+        return {"success": False, "error": "User rejected the code change during preview."}
+
+    code_to_modify = code_to_modify.replace(search_block, replace_block)
+    if code_to_modify is None:
+        return {"success": False, "error": "Failed to apply patch. SEARCH block not found in the original code."}
 
     full_path = Path(state.repo_root) / file_path
     if not full_path.exists():
         return {"success": False, "error": f"File not found: {file_path}"}
 
     file_text = full_path.read_text(encoding="utf-8")
-
+    
+    applied_count = 0
     for search_block, replace_block in blocks:
         if search_block.strip() == replace_block.strip():
-            return {"success": False, "error": "REPLACE block is identical to SEARCH block. No changes made."}
+            continue
 
-        # --- PREVIEW CODE CHANGES ---
-        log.info(f"[bold cyan]🔍 Applying Patch to:[/bold cyan] {file_path}")
-        if agent.logger.DIFF_CALLBACK:
-            agent.logger.DIFF_CALLBACK(file_path, search_block, replace_block)
-        
-        # PHASE 1 AUTO-APPROVAL: 
-        # We bypass the blocking input() here so the TUI thread doesn't freeze.
-        # (We will build a beautiful interactive diff-approval widget in Phase 3!) 
-        
+        # --- ASK FOR UI APPROVAL USING OUR NEW THREAD-SAFE QUEUE ---
+        payload = {"file": file_path, "search": search_block.strip(), "replace": replace_block.strip()}
+        if not ask_user_approval("rewrite_function", payload):
+            return {"success": False, "error": "User rejected the code change during preview."}
 
         # --- APPLY PATCH ---
         patched_text = apply_patch(file_text, search_block, replace_block)
         
-        # --- WHITESPACE-NORMALIZED MATCHING FALLBACK ---
         if patched_text is None:
             log.warning("Strict match failed. Attempting whitespace-normalized matching...")
             words = search_block.strip().split()
             if words:
-                # Build regex that allows arbitrary spacing/newlines between all words
                 pattern = r'\s+'.join(re.escape(w) for w in words)
                 match = re.search(pattern, file_text)
                 if match:
                     patched_text = file_text[:match.start()] + replace_block + file_text[match.end():]
-                    log.info("Whitespace-normalized match successful!")
         
         if patched_text is None:
-            return {"success": False, "error": "SEARCH block did not exactly match the file content, even with normalization."}
-        
+            return {"success": False, "error": "SEARCH block did not exactly match the file content."}
+            
         file_text = patched_text
+        applied_count += 1
 
     # SYNTAX SENTINEL
     if file_path.endswith(".py"):
@@ -119,11 +108,13 @@ def _rewrite_function(state, code_to_modify, file_path):
             ast.parse(file_text)
         except SyntaxError as e:
             error_msg = f"CRITICAL: SyntaxError! '{e.msg}' at line {e.lineno}. Rollback triggered."
-            log.error(f"Syntax check failed for {file_path}.")
             return {"success": False, "error": error_msg}
 
+    if applied_count == 0:
+         return {"success": False, "error": "No valid changes were generated."}
+
     full_path.write_text(file_text, encoding="utf-8")
-    return {"success": True, "file": file_path, "message": f"Applied {len(blocks)} patch(es). Syntax valid."}
+    return {"success": True, "file": file_path, "message": f"Applied {applied_count} patch(es). Syntax valid."}
 
 
 def run_agent(state):
