@@ -4,6 +4,7 @@ import sys
 
 # Global callback that the Textual App will hook into
 UI_CALLBACK = None
+DIFF_CALLBACK = None # Add this line!
 
 class TUILogHandler(logging.Handler):
     """Streams log records directly to the Textual UI if connected."""
@@ -18,7 +19,7 @@ class TUILogHandler(logging.Handler):
 
 def setup_logger(log_file="operon.log"):
     logger = logging.getLogger("Operon")
-    logger.setLevel(logging.DEBUG) 
+    logger.setLevel(logging.INFO) 
     
     if not logger.handlers:
         # File Handler: Keep the permanent record exactly as it was

@@ -8,11 +8,12 @@ from tools.function_locator import find_function
 from tools.code_slice import load_function_slice
 from agent.llm import call_llm
 from pathlib import Path
+import agent.logger
 import ast
 import time
 import re
 
-MAX_STEPS = 40
+MAX_STEPS = 30
 
 def _detect_function_from_goal(goal, repo_root):
     clean_goal = re.sub(r"[^\w\s]", " ", goal)
@@ -61,6 +62,7 @@ def _rewrite_function(state, code_to_modify, file_path):
         "- The SEARCH block must EXACTLY match the existing code character-for-character.\n"
         "- INDENTATION IS MANDATORY. You MUST include all leading spaces in the REPLACE block. If you drop the spaces, the code will break.\n"
         "- ONLY output the SEARCH/REPLACE block. No conversational text.\n"
+        "- You can output MULTIPLE SEARCH/REPLACE blocks if you need to change mulitple different parts of the same or different files (e.g., adding an import at top AND changing a function at the bottom).\n"
         "- Keep the changes minimal. Do not replace the whole function.\n"
     )
 
@@ -83,7 +85,8 @@ def _rewrite_function(state, code_to_modify, file_path):
 
         # --- PREVIEW CODE CHANGES ---
         log.info(f"[bold cyan]🔍 Applying Patch to:[/bold cyan] {file_path}")
-        log.debug(f"SEARCH BLOCK:\n{search_block.strip()}\n---\nREPLACE BLOCK:\n{replace_block.strip()}")
+        if agent.logger.DIFF_CALLBACK:
+            agent.logger.DIFF_CALLBACK(file_path, search_block, replace_block)
         
         # PHASE 1 AUTO-APPROVAL: 
         # We bypass the blocking input() here so the TUI thread doesn't freeze.

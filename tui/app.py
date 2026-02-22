@@ -3,6 +3,11 @@ from textual.containers import Horizontal, Vertical
 from textual.widgets import Header, Footer, RichLog, Input, Static
 from textual.worker import get_current_worker
 from rich.text import Text
+from rich.panel import Panel
+from rich.console import Group
+from rich.syntax import Syntax
+import agent.logger
+
 import os
 
 
@@ -71,8 +76,8 @@ class OperonUI(App):
         log_widget.write("Type your goal below and press Enter.")
 
         # Hook agent logger -> UI
-        import agent.logger
         agent.logger.UI_CALLBACK = self.safe_update_log
+        agent.logger.DIFF_CALLBACK = self.safe_show_diff
 
     # ---------- USER INPUT ----------
 
@@ -124,7 +129,28 @@ class OperonUI(App):
     def _write_to_log(self, message: str) -> None:
         log_widget = self.query_one("#chat-log", RichLog)
         log_widget.write(message)
+    
 
+    # tui/app.py (Add inside OperonUI class)
+
+    def safe_show_diff(self, filename: str, search: str, replace: str) -> None:
+        """Thread-safe call to update the workspace pane."""
+        self.call_from_thread(self._render_diff, filename, search, replace)
+
+    def _render_diff(self, filename: str, search: str, replace: str) -> None:
+        """Draws a beautiful before/after diff in the right panel."""
+        workspace = self.query_one("#workspace-view", Static)
+        
+        # Format the code blocks with syntax highlighting
+        search_syntax = Syntax(search, "python", theme="monokai", line_numbers=True)
+        replace_syntax = Syntax(replace, "python", theme="monokai", line_numbers=True)
+        
+        diff_view = Group(
+            Text(f"File: {filename}", style="bold magenta"),
+            Panel(search_syntax, title="[bold red]Old Code (Search)[/bold red]", border_style="red"),
+            Panel(replace_syntax, title="[bold green]New Code (Replace)[/bold green]", border_style="green")
+        )
+        workspace.update(diff_view)
 
 # ---------- ENTRY ----------
 

@@ -16,7 +16,7 @@ def decide_next_action(state) -> dict:
     recent_obs = "\n".join([str(obs) for obs in state.observations[-2:]]) if state.observations else "None"
     plan_text = getattr(state, "plan", "No plan generated.")
 
-    prompt = f'''You are Operon, an elite autonomous AI software engineer. You have agency to explore, edit, and fix code.
+    prompt = f'''You are Operon, an elite autonomous AI software engineer. You have agency to explore, edit, and fix code. Your goal is to {state.goal}.
 
 [ORIGINAL GOAL]
 {state.goal}
@@ -58,7 +58,7 @@ EXAMPLE OUTPUT (DO NOT COPY THIS - IT IS JUST A FORMAT TEMPLATE):
 }}
 '''    
 
-    log.info("Calling LLM to decide next action (ReAct mode)...")
+    log.debug("Calling LLM to decide next action (ReAct mode)...")
     raw_output = call_llm(prompt, require_json=True)
     
     # Aggressive JSON cleanup
