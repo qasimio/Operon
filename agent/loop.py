@@ -216,7 +216,6 @@ def run_agent(state):
             if not path:
                 state_done = True
                 continue
-            
             obs = read_file(path, state.repo_root)
             state.observations.append(obs)
             
