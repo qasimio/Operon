@@ -19,17 +19,17 @@ class TUILogHandler(logging.Handler):
 
 def setup_logger(log_file="operon.log"):
     logger = logging.getLogger("Operon")
-    logger.setLevel(logging.INFO) 
+    logger.setLevel(logging.DEBUG) 
     
     if not logger.handlers:
         # File Handler: Keep the permanent record exactly as it was
         file_handler = logging.FileHandler(log_file, encoding='utf-8', mode='w')
-        file_handler.setLevel(logging.DEBUG)
+        file_handler.setLevel(logging.INFO)
         file_handler.setFormatter(logging.Formatter('%(asctime)s | %(levelname)-8s | %(module)s | %(message)s'))
         
         # TUI Handler: Formats logs using Rich markup tags instead of ANSI
         tui_handler = TUILogHandler()
-        tui_handler.setLevel(logging.INFO)
+        tui_handler.setLevel(logging.DEBUG)
         tui_handler.setFormatter(logging.Formatter('[dim]%(asctime)s[/dim] | %(message)s'))
         
         logger.addHandler(file_handler)
