@@ -30,15 +30,24 @@ def _rewrite_function(state, code_to_modify, file_path):
     prompt = (
         "You are Operon, a surgical code editor.\n"
         f"GOAL: {state.goal}\n\n"
+
+        "CRITICAL CONTEXT - READ CAREFULLY:\n"
+        f"You are CURRENTLY EDITING the file: `{file_path}`\n"
+        f"Even if the goal mentions multiple files or tasks, you must IGNORE them right now.\n"
+        f"Focus 100% ONLY on applying the necessary changes to `{file_path}`.\n"
+        "DO NOT output SEARCH/REPLACE blocks for any other files.\n\n"
+
         "CURRENT CODE TO MODIFY:\n"
         "```python\n"
         f"{code_to_modify}\n"
         "```\n\n"
+
         "INSTRUCTIONS:\n"
         "You must modify the code using a SEARCH/REPLACE block.\n"
         "1. Find the exact original lines you need to change.\n"
         "2. Output a SEARCH block with the exact original lines.\n"
         "3. Output a REPLACE block with the new lines.\n\n"
+
         "EXAMPLE OUTPUT FORMAT:\n"
         "<<<<<<< SEARCH\n"
         "    def hello_world():\n"
@@ -47,6 +56,7 @@ def _rewrite_function(state, code_to_modify, file_path):
         "    def hello_world():\n"
         "        print(\"hello, world!\")\n"
         ">>>>>>> REPLACE\n\n"
+
         "RULES:\n"
         "- The SEARCH block must EXACTLY match the existing code character-for-character.\n"
         "- INDENTATION IS MANDATORY. You MUST include all leading spaces in the REPLACE block. If you drop the spaces, the code will break.\n"
