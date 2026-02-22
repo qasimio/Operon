@@ -81,7 +81,7 @@ def _rewrite_function(state, code_to_modify, file_path):
 
     file_text = full_path.read_text(encoding="utf-8")
 
-# Apply all patches
+    # Apply all patches
     for search_block, replace_block in blocks:
         if search_block.strip() == replace_block.strip():
             return {
@@ -139,7 +139,6 @@ def run_agent(state):
     while not state.done and state.step_count < MAX_STEPS:
 
         # ---------- LET DECIDE.PY DO ITS JOB ----------
-        # (We deleted the hardcoded heuristics block)
         action = decide_next_action(state) or {}
 
         if not isinstance(action, dict) or "action" not in action:
@@ -147,50 +146,48 @@ def run_agent(state):
             state.done = True
             continue
 
-        # ================= PROGRAMMATIC LOOP BREAKER =================
+        act = action.get("action")
+
+        # Ensure state updates BEFORE the loop breaker fires, so we don't desync
         last_dict = getattr(state, "last_action_dict", None)
+        state.last_action_dict = action
+        state.last_action = act
+        state.step_count += 1
+
+        # ================= PROGRAMMATIC LOOP BREAKER =================
         if last_dict == action:
             log.error(f"LOOP DETECTED: LLM repeated exact action: {action}")
             
-# Context-Aware Hard Nudge
-            act_name = action.get("action")
-            if act_name == "search_repo":
+            # Context-Aware Hard Nudge
+            if act == "search_repo":
                 nudge = "DO NOT SEARCH FOR THE SAME THING AGAIN. Read a file from the results."
-            elif act_name == "read_file":
+            elif act == "read_file":
                 target_path = action.get("path", "this file")
-                nudge = f"DO NOT READ '{target_path}' AGAIN. You already have the contents in your observations. You MUST use 'rewrite_function' to edit it, or move on to your next task."
-            elif act_name == "rewrite_function":
+                nudge = f"DO NOT READ '{target_path}' AGAIN. You already have the contents. Use 'rewrite_function' to edit it, or use 'finish' if done."
+            elif act == "rewrite_function":
                 target_path = action.get("file", "this file")
-                nudge = f"DO NOT EDIT '{target_path}' REPEATEDLY WITHOUT FIXING THE ERROR. Read the error message carefully. If it's fixed, move to the next task or 'stop'."
+                nudge = f"DO NOT EDIT '{target_path}' REPEATEDLY. Read the error message carefully. If it's fixed, move to the next task or use 'finish'."
             else:
                 nudge = "YOU ARE IN A LOOP. You MUST pick a completely different action."
 
             override_msg = f"SYSTEM CRITICAL ERROR: You are stuck in a loop repeating {action}. {nudge}"
             
             state.observations.append({"error": override_msg})
-            state.step_count += 1
             
             if len(state.observations) > 10:
                 state.observations = state.observations[:3] + state.observations[-2:]
                 
             continue 
             
-        # Save the action so we can check it next loop
-        state.last_action_dict = action
         # =============================================================
 
-        log.info(f"Executing action: {action.get('action')}")
+        log.info(f"Executing action: {act}")
         log.debug(f"Full state payload: {action}")
 
-        act = action.get("action")
-        state.last_action = act
-        state.step_count += 1
-        
-        # =============================================================
-
-        action_name = action.get("action")
-        if action_name == "finish":
-            log.info(f"OPERON DECLARES VICOTRY: {action.get('message', 'All task completed.')}")
+        # ================= FINISH BUTTON =================
+        if act == "finish":
+            log.info(f"✅ OPERON DECLARES VICTORY: {action.get('message', 'All tasks completed.')}")
+            state.done = True
             break
         
         # ================= SEARCH REPO =================
@@ -230,9 +227,8 @@ def run_agent(state):
         # ================= FUNCTION REWRITE =================
         elif act == "rewrite_function":
             target_file = action.get("file")
-            target_func = action.get("function") # The LLM's chosen function
+            target_func = action.get("function") 
             
-            # Fallback to the heuristic's function name if the LLM left it blank
             target_func = target_func or func_name
 
             if not target_file:
@@ -244,7 +240,6 @@ def run_agent(state):
                 state.done = True
                 continue
 
-            # NEW: Try to get a slice, but fallback to the full file if not found/provided!
             code_to_modify = ""
             if target_func:
                 slice_data = load_function_slice(state.repo_root, target_func)
@@ -252,7 +247,6 @@ def run_agent(state):
                     code_to_modify = slice_data["code"]
             
             if not code_to_modify:
-                # Read the full file instead
                 full_path = Path(state.repo_root) / target_file
                 if full_path.exists():
                     code_to_modify = full_path.read_text(encoding="utf-8")
@@ -260,7 +254,6 @@ def run_agent(state):
                     error_msg = f"File not found: {target_file}. You used the wrong path. Check the search results and try again (e.g., agent/logger.py)."
                     state.errors.append(error_msg)
                     state.observations.append({"error": error_msg})
-                    # DO NOT set state.done = True! Let it loop and try again.
                     continue
 
             obs = _rewrite_function(
@@ -269,10 +262,11 @@ def run_agent(state):
                 target_file
             )
 
-            state.observations.append(obs)
-
             if obs.get("success"):
                 log.info(f"Successfully patched {target_file}")
+                
+                # INJECT A STRONG MEMORY SO IT KNOWS IT'S DONE WITH THIS FILE
+                obs["message"] += f" | CHECKPOINT: Task for {target_file} is COMPLETE. Cross it off your list."
                 
                 if target_file not in state.files_modified:
                     state.files_modified.append(target_file) 
@@ -287,16 +281,13 @@ def run_agent(state):
                 error_msg = f"Failed to rewrite {target_func or target_file}: {obs.get('error')}"
                 state.errors.append(error_msg)
 
-# ================= STOP =================
-        elif act == "stop":
-            log.info("Agent has declared the goal met and requested to stop.")
-            state.done = True
+            state.observations.append(obs)
 
         # ================= HALLUCINATION RECOVERY =================
         else:
             log.warning(f"LLM hallucinated unknown action: {act}")
             state.observations.append({
-                "error": f"SYSTEM OVERRIDE: '{act}' is NOT a valid action. You MUST strictly use one of these exact names: search_repo, read_file, rewrite_function, or stop."
+                "error": f"SYSTEM OVERRIDE: '{act}' is NOT a valid action. You MUST strictly use one of these exact names: search_repo, read_file, rewrite_function, or finish."
             })
             time.sleep(1)
 
