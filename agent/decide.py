@@ -43,12 +43,20 @@ RECENT OBSERVATIONS:
 
 {state_hint}
 
-AVAILABLE TOOLS (Choose EXACTLY ONE):
-1. {{"action": "search_repo", "query": "actual keywords"}} 
+MEMORY & PROGRESS CHECK:
+        "Look at your Recent History below. Ask yourself: 'Have I completed ALL parts of the GOAL?'\n"
+        "- If YES: You MUST use the 'finish' action.\n"
+        "- If NO: Determine the exact next file you need to search or read.\n\n"
+
+AVAILABLE TOOLS:
+1. {{"action": "search_repo", "query": "search terms"}} 
+   (Finds files containing the query. Use this first.)
 2. {{"action": "read_file", "path": "path/to/file.py"}} 
+   (Reads the exact contents of a file.)
 3. {{"action": "rewrite_function", "file": "path/to/file.py", "function": "function_name"}} 
-   (Delegates actual coding. If you are adding code to the very bottom of a file, use "None" for function. DO NOT add extra keys like 'content' or 'patch'. The actual code changes will be requested in the next step.)
-4. {{"action": "stop"}} 
+   (Delegates actual coding. If adding to the bottom of a file, use "None" for function. DO NOT add extra keys.)
+4. {{"action": "finish", "message": "Brief summary of what was completed"}}
+   (CRITICAL: Use this immediately when ALL parts of the GOAL have been achieved. This is your stop button.)
 
 STRICT RULES FOR MULTI-TASKING:
 1. NEVER repeat the exact same action twice in a row.

@@ -186,8 +186,15 @@ def run_agent(state):
         state.last_action = act
         state.step_count += 1
         
+        # =============================================================
+
+        action_name = action.get("action")
+        if action_name == "finish":
+            log.info(f"OPERON DECLARES VICOTRY: {action.get('message', 'All task completed.')}")
+            break
+        
         # ================= SEARCH REPO =================
-        if act == "search_repo":
+        elif act == "search_repo":
             query = action.get("query", "")
             if not query:
                 log.error("Search query missing.")
