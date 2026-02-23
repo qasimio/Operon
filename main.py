@@ -1,5 +1,4 @@
 # main.py
-import json
 import sys
 from tui.app import OperonUI
 
@@ -10,4 +9,3 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print("\nOperon shut down safely.")
         sys.exit(0)
-    # Subscribe to Cooks Corner
