@@ -14,7 +14,7 @@ import agent.logger
 import time
 import re
 
-MAX_STEPS = 20
+MAX_STEPS = 30
 
 def _detect_function_from_goal(goal, repo_root):
     clean_goal = re.sub(r"[^\w\s]", " ", goal)
@@ -130,16 +130,14 @@ def run_agent(state):
     if not hasattr(state, "action_log"):
         state.action_log = []
 
-    func_name, loc = _detect_function_from_goal(state.goal, state.repo_root)
-    if func_name:
-        slice_data = load_function_slice(state.repo_root, func_name)
-        if slice_data:
-            state.observations.append({"function_context": slice_data})
-
+    # ================= ARCHITECT PHASE =================
     if not getattr(state, "plan", None):
-        state.plan = make_plan(state.goal, state.repo_root)
-    print("\nPLAN:", state.plan, "\n")
-    log.info(f"[bold magenta]PLAN GENERATED:[/bold magenta] {state.plan}")
+        state.phase = "ARCHITECT"
+        state.plan, state.is_question = make_plan(state.goal, state.repo_root)
+        log.info(f"[bold magenta]🏛️ ARCHITECT PLAN (Is Question: {state.is_question}):[/bold magenta] {state.plan}")
+    
+    # Hand off to the Coder to begin Step 1
+    state.phase = "CODER"
 
     while not state.done and state.step_count < MAX_STEPS:
         decision = decide_next_action(state) or {}
@@ -150,90 +148,78 @@ def run_agent(state):
         if not isinstance(action_payload, dict) or "action" not in action_payload:
             log.error("FATAL: Invalid action dict. LLM Hallucinated format.")
             state.observations.append({"error": "SYSTEM OVERRIDE: Invalid JSON format. You MUST output a dictionary with an 'action' key."})
-            state.action_log.append("FAILED: LLM output did not contain a valid action.")
             time.sleep(1)
             continue
 
         act = action_payload.get("action")
 
-        # ================= TOOL JAIL INTERCEPTION =================
         if act not in ALLOWED_ACTIONS:
             log.warning(f"Jail intercepted hallucinated tool: {act}")
             state.observations.append({"error": f"SYSTEM OVERRIDE: '{act}' is not a valid tool. Allowed: {list(ALLOWED_ACTIONS.keys())}"})
-            state.action_log.append(f"FAILED: Hallucinated invalid tool '{act}'.")
-            time.sleep(1)
-            continue
-            
-        missing_fields = [f for f in ALLOWED_ACTIONS[act] if f not in action_payload]
-        if missing_fields:
-            err_msg = f"Tool '{act}' is missing required fields: {missing_fields}"
-            log.warning(f"Jail intercepted bad payload: {err_msg}")
-            state.observations.append({"error": f"SYSTEM OVERRIDE: {err_msg}"})
-            state.action_log.append(f"FAILED: {err_msg}")
             time.sleep(1)
             continue
 
-        # Programmatic Loop Breaker
         last_action_payload = getattr(state, "last_action_payload", None)
         state.last_action_payload = action_payload
         state.step_count += 1
 
         if last_action_payload == action_payload:
             log.error(f"LOOP DETECTED: Agent repeated exact tool: {action_payload}")
-            state.observations.append({"error": f"SYSTEM OVERRIDE: Loop detected. You just tried to do exactly {action_payload} again. Do something else."})
-            state.action_log.append(f"ERROR: Caught in a loop repeating '{act}'. System intervened.")
+            state.observations.append({"error": f"SYSTEM OVERRIDE: Loop detected. Do something else."})
             time.sleep(1)
             continue 
 
-        log.info(f"🧠 OPERON THOUGHT: {thought}")
+        log.info(f"🧠 {state.phase} THOUGHT: {thought}")
         log.info(f"⚙️ EXECUTING TOOL: {act}")
-        log.debug(f"Tool payload: {action_payload}")
 
-        # ================= ROUTING =================
-        if act == "finish":
-            if not getattr(state, "files_modified", []):
-                log.warning("Agent tried to finish without modifying any files! System override.")
-                state.observations.append({"error": "SYSTEM OVERRIDE: You tried to finish, but you haven't patched any files yet. You must use 'rewrite_function' to achieve the goal before finishing."})
-                state.action_log.append("ERROR: Attempted premature finish without any modifications.")
-                continue
+        # ================= MULTI-AGENT ROUTING =================
+        if act == "step_complete":
+            state.action_log.append(f"👨‍💻 CODER completed step {state.current_step + 1}: {action_payload.get('message', '')}")
+            state.phase = "REVIEWER"
+            log.info(f"[bold cyan]👨‍⚖️ Handing over to REVIEWER to check step {state.current_step + 1}...[/bold cyan]")
             
-            files_read = getattr(state, "files_read", [])
-            files_modified = getattr(state, "files_modified", [])
-            if len(files_read) > len(files_modified):
-                unpatched = [f for f in files_read if f not in files_modified]
-                log.warning(f"Agent left files unpatched: {unpatched}")
-                state.observations.append({"error": f"SYSTEM OVERRIDE: You read these files but NEVER patched them: {unpatched}. Did you forget to use 'rewrite_function'?"})
-                state.action_log.append("ERROR: Attempted finish but left files unpatched.")
-                continue
-
+        elif act == "approve_step":
+            state.action_log.append(f"👨‍⚖️ REVIEWER approved step {state.current_step + 1}: {action_payload.get('message', '')}")
+            state.current_step += 1
+            if state.current_step >= len(state.plan):
+                log.info("[bold green]✅ All plan steps complete! REVIEWER should finish next.[/bold green]")
+            state.phase = "CODER"
+            log.info(f"[bold yellow]👨‍💻 Handing back to CODER for next step...[/bold yellow]")
+            
+        elif act == "reject_step":
+            feedback = action_payload.get('feedback', 'No feedback provided.')
+            state.action_log.append(f"❌ REVIEWER REJECTED step {state.current_step + 1}: {feedback}")
+            state.observations.append({"reviewer_feedback": feedback})
+            state.phase = "CODER"
+            log.info(f"[bold red]👨‍💻 Handing back to CODER for corrections: {feedback}[/bold red]")
+            
+        elif act == "finish":
+            # WE DELETED THE SYSTEM OVERRIDE. WE TRUST THE REVIEWER NOW!
             msg = action_payload.get('message', 'All tasks completed.')
             log.info(f"✅ OPERON DECLARES VICTORY: {msg}")
             state.action_log.append(f"Session Finished: {msg}")
             state.done = True
             break
         
+        # ================= STANDARD TOOLS =================
         elif act == "search_repo":
             query = action_payload.get("query", "")
             hits = search_repo(state.repo_root, query) if query else []
-            
             if hits:
-                obs = {"search_results": f"Found query '{query}' in files: {hits}"}
+                obs = {"search_results": f"Found '{query}' in: {hits}"}
                 state.action_log.append(f"Searched for '{query}'. Found {len(hits)} files.")
             else:
                 obs = {"search_results": f"No matches found for '{query}'."}
                 state.action_log.append(f"Searched for '{query}'. Found 0 files.")
-                
             state.observations.append(obs)
 
         elif act == "read_file":
             path = action_payload.get("path")
-            if not path:
-                continue
+            if not path: continue
             obs = read_file(path, state.repo_root)
             state.observations.append(obs)
-            
             if "error" in obs:
-                state.action_log.append(f"Attempted to read '{path}' but failed: {obs['error']}")
+                state.action_log.append(f"Attempted to read '{path}' but failed.")
             else:
                 state.action_log.append(f"Read contents of file '{path}'.")
                 if path not in state.files_read:
@@ -241,53 +227,28 @@ def run_agent(state):
 
         elif act == "rewrite_function":
             target_file = action_payload.get("file")
-            target_func = action_payload.get("function") or func_name
+            if not target_file: continue
 
-            if not target_file:
-                state.observations.append({"error": "rewrite_function requires a 'file' parameter"})
-                state.action_log.append("FAILED: rewrite_function missing 'file' parameter")
-                continue
-
-            code_to_modify = ""
-            if target_func and target_func != "None":
-                slice_data = load_function_slice(state.repo_root, target_func)
-                if slice_data: code_to_modify = slice_data["code"]
-            
-            # --- FIX: SMART FILE CREATION ---
             full_path = Path(state.repo_root) / target_file
             if not full_path.exists():
-                log.info(f"File {target_file} not found. Creating a new empty file so Operon can write to it.")
                 full_path.parent.mkdir(parents=True, exist_ok=True)
                 full_path.touch()
 
-            if not code_to_modify:
-                code_to_modify = full_path.read_text(encoding="utf-8")
-
+            code_to_modify = full_path.read_text(encoding="utf-8")
             obs = _rewrite_function(state, code_to_modify, target_file)
 
             if obs.get("success"):
                 log.info(f"Successfully patched {target_file}")
                 state.action_log.append(f"SUCCESS: Applied code patch to '{target_file}'.")
-                
                 if target_file not in state.files_modified:
                     state.files_modified.append(target_file) 
-                
-                try:
-                    from tools.git_tools import smart_commit_pipeline
-                    smart_commit_pipeline(state.goal, state.repo_root)
-                except Exception:
-                    pass
             else:
                 err = obs.get('error') or ""
                 log.error(f"Patch failed: {err}")
-
                 if "Patch failed" in err or "did not exactly match" in err:
-                    err += " HINT: Your SEARCH block was wrong. Try matching a smaller, more unique part of the code, or leave SEARCH completely empty if appending to the bottom."
-
+                    err += " HINT: Your SEARCH block was wrong. Match exact lines or leave empty to append."
                 state.action_log.append(f"FAILED patch on '{target_file}'. Error: {err}")
                 state.observations.append({"error": err})
-
-            state.observations.append(obs)
 
         time.sleep(0.2)
 
