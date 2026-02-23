@@ -1,4 +1,5 @@
 # main.py
+import json
 import sys
 from tui.app import OperonUI
 
