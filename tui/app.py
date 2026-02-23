@@ -76,12 +76,25 @@ class OperonUI(App):
     def on_mount(self) -> None:
         self.title = "Operon - Autonomous SWE"
         log = self.query_one("#chat-log", RichLog)
-        log.write("[bold blue]🚀 Operon TUI Initialized.[/bold blue]")
+        log.write("[bold blue] 🧬 **Operon** TUI Initialized.[/bold blue]")
         log.write("Type your goal below. Use Ctrl+Shift+V to paste.")
         
         # Hook up the bridges
         agent.logger.UI_CALLBACK = self.safe_update_log
         agent.logger.UI_SHOW_DIFF = self.safe_show_diff
+
+        # ------- BACKGROUNT INDEXING ---------
+        self.run_worker(self._background_index, exclusive=True, thread=True)
+
+    def _background_index(self) -> None:
+        """Indexes the repo into LanceDB on starup."""
+        from tools.semantic_memory import index_repo
+        try:
+            index_repo(os.getcwd())
+        except Exception as e:
+            import agent.logger
+            agent.logger.log.error(f"Failed to boot memory: {e}")
+
 
     def on_key(self, event: Key) -> None:
         """Global key interceptor for 'y' or 'n' when the input is disabled."""

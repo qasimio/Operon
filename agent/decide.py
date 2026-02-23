@@ -4,67 +4,103 @@ from agent.llm import call_llm
 from agent.logger import log
 
 def decide_next_action(state) -> dict:
-    # --- EPISODIC MEMORY COMPRESSION ---
-    # Instead of raw, noisy observations, we look at the chronological journal of actions
-    action_log = getattr(state, "action_log", [])
-    if not action_log:
-        formatted_history = "No actions taken yet."
+    if state.phase == "CODER":
+        return _run_coder(state)
+    elif state.phase == "REVIEWER":
+        return _run_reviewer(state)
+    return {}
+
+def _run_coder(state):
+    action_log = "\n".join([f"{i+1}. {entry}" for i, entry in enumerate(state.action_log)]) or "No actions yet."
+    recent_obs = "\n".join([str(obs) for obs in state.observations[-3:]]) if getattr(state, "observations", []) else "None"
+    
+    # Render the Working Memory (Context Buffer) cleanly
+    context_buffer = getattr(state, "context_buffer", {})
+    context_files_text = ""
+    if context_buffer:
+        for filepath, content in context_buffer.items():
+            context_files_text += f"\n--- FILE LOADED: {filepath} ---\n{content}\n--------------------------\n"
     else:
-        formatted_history = "\n".join([f"{i+1}. {entry}" for i, entry in enumerate(action_log)])
+        context_files_text = "No files currently loaded. Use `read_file` to inspect code."
 
-    # Keep a small buffer of raw recent errors/observations just for immediate context
-    recent_obs = "\n".join([str(obs) for obs in state.observations[-2:]]) if state.observations else "None"
-    plan_text = getattr(state, "plan", "No plan generated.")
+    if not getattr(state, "plan", None):
+        current_step_text = "Analyze the goal and execute necessary actions."
+    elif state.current_step < len(state.plan):
+        current_step_text = state.plan[state.current_step]
+    else:
+        current_step_text = "All planned steps complete. Use the step_complete tool."
 
-    prompt = f'''You are Operon, an elite autonomous AI software engineer. You have agency to explore, edit, and fix code. Your goal is to {state.goal}.
+    prompt = f"""You are the CODER of an elite AI engineering team.
+OVERALL GOAL: {state.goal}
+CURRENT PLAN STEP: {current_step_text}
 
-[ORIGINAL GOAL]
-{state.goal}
+[WORKING MEMORY: LOADED FILES]
+{context_files_text}
 
-[YOUR PLAN]
-{plan_text}
+[EPISODIC MEMORY: ACTION HISTORY]
+{action_log}
 
-[CHRONOLOGICAL ACTION HISTORY]
-(Read this carefully to know exactly what you have already accomplished. DO NOT hallucinate completions. You MUST see "SUCCESS" in this history for a task to be considered done.)
-{formatted_history}
-
-[LATEST SYSTEM OBSERVATIONS / ERRORS]
+[RECENT OBSERVATIONS & ERRORS]
 {recent_obs}
 
-[YOUR TASK]
-1. Read the ACTION HISTORY strictly.
-2. Compare your history against the ORIGINAL GOAL.
-3. Determine if EVERY part of the goal is fully complete based ONLY on the ACTION HISTORY.
-4. Decide the exact next tool to use.
+CRITICAL RULES FOR MULTI-TASKING:
+1. **Never read a file twice:** Look at [WORKING MEMORY]. If the file is already there, DO NOT use `read_file` on it again. Move directly to `rewrite_function`.
+2. **Loop Prevention:** If your [RECENT OBSERVATIONS] show "Loop detected", you must use a DIFFERENT tool immediately.
+3. **Task Handoff:** If your [ACTION HISTORY] shows you just successfully applied a code patch for the CURRENT PLAN STEP, DO NOT do anything else. You MUST immediately use `step_complete` to hand off to the Reviewer.
 
-AVAILABLE TOOLS:
-1. {{"action": "search_repo", "query": "search terms"}} 
-   (Finds files containing the query. Use this to locate code.)
-2. {{"action": "read_file", "path": "path/to/file.py"}} 
-   (Reads the exact contents of a file into your observations.)
-3. {{"action": "rewrite_function", "file": "path/to/file.py", "function": "function_name"}} 
-   (Triggers the code patch engine. DO NOT include the new code here. Use "None" for function if unknown.)
-4. {{"action": "finish", "message": "Brief summary of what was completed"}}
-   (CRITICAL: Use this ONLY when the ACTION HISTORY proves all parts of the GOAL are met.)
+ALLOWED TOOLS (Choose exactly ONE and output it as JSON):
+- {{"action": "search_repo", "query": "search terms"}}
+- {{"action": "read_file", "path": "file/path.py"}}
+- {{"action": "rewrite_function", "file": "file/path.py"}}
+- {{"action": "step_complete", "message": "Summary of what I completed"}}
 
-REQUIREMENT: You MUST output a JSON object containing a "thought" and a "tool".
-- "thought": Step-by-step reasoning. What did you just do? What is left in the goal?
-- "tool": The exact JSON payload from the AVAILABLE TOOLS list.
+REQUIREMENT: Output a JSON object containing "thought" and "tool".
+"""
+    return _call_and_parse(prompt)
 
-EXAMPLE OUTPUT (DO NOT COPY THIS - IT IS JUST A FORMAT TEMPLATE):
-{{
-    "thought": "Looking at my history, I see SUCCESS for patching 'utils/math.py' to fix the division by zero bug. The goal asked for nothing else. I should now terminate the session.",
-    "tool": {{"action": "finish", "message": "Division by zero bug fixed."}}
-}}
-'''    
 
-    log.debug("Calling LLM to decide next action (ReAct mode)...")
-    raw_output = call_llm(prompt, require_json=True)
+def _run_reviewer(state):
+    action_log = "\n".join([f"{i+1}. {entry}" for i, entry in enumerate(state.action_log[-5:])]) if state.action_log else "None"
     
-    # Aggressive JSON cleanup
+    if not state.plan:
+        current_step_text = "Analyze the goal and execute necessary actions."
+    elif state.current_step < len(state.plan):
+        current_step_text = state.plan[state.current_step]
+    else:
+        current_step_text = "All planned steps complete."
+        
+    prompt = f"""You are the REVIEWER of an elite AI engineering team.
+OVERALL GOAL: {state.goal}
+CURRENT PLAN STEP: {current_step_text}
+
+RECENT CODER ACTIONS:
+{action_log}
+
+YOUR JOB:
+1. Evaluate if the CODER successfully completed the CURRENT PLAN STEP.
+2. If YES and there are more steps: Use `approve_step`.
+3. If NO: Use `reject_step` and provide specific "feedback".
+4. If ALL steps are complete, use `finish`.
+
+ALLOWED TOOLS (Choose exactly ONE and output it as JSON):
+- {{"action": "approve_step", "message": "Good job, moving to next step"}}
+- {{"action": "reject_step", "feedback": "You forgot to do X"}}
+- {{"action": "finish", "message": "Goal accomplished"}}
+
+REQUIREMENT: Output a JSON object containing "thought" and "tool".
+"""
+    return _call_and_parse(prompt)
+
+def _call_and_parse(prompt):
+    raw_output = call_llm(prompt, require_json=True)
     clean_json = re.sub(r"```(?:json)?\n?(.*?)\n?```", r"\1", raw_output, flags=re.DOTALL).strip()
     try:
-        return json.loads(clean_json)
-    except json.JSONDecodeError:
-        log.error(f"[JSON PARSE ERROR]: Could not parse cleaned JSON from LLM output: {clean_json}")
-        return {"thought": "Failed to parse JSON from LLM output.", "tool": {"action": "read_file", "path": "agent/llm.py"}}
+        data = json.loads(clean_json)
+        if "action" in data and "tool" not in data:
+            return {"thought": data.get("thought", "Proceeding with action."), "tool": data}
+        if "tool" not in data:
+            return {} 
+        return data
+    except Exception as e:
+        log.error(f"Parse error: {e}")
+        return {}
