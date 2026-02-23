@@ -1,6 +1,6 @@
 {
   "main.py": {
-    "summary": "This file is the entry point for an application that initializes and runs an instance of `OperonUI`, a user interface component, handling graceful shutdown on keyboard interrupts.",
+    "summary": "This file is the main entry point for an application that initializes and runs an instance of `OperonUI`, a user interface component, handling graceful shutdown on keyboard interrupts.",
     "functions": [],
     "classes": [],
     "imports": [
@@ -10,19 +10,25 @@
     ]
   },
   "requirements.txt": {
-    "summary": "This file lists the Python packages and their versions required by a project.",
+    "summary": "This file lists the Python packages and their versions required for a project.",
     "functions": [],
     "classes": [],
     "imports": []
   },
   "test.js": {
-    "summary": "This file outputs \"hello world\" to the console.",
-    "functions": [],
+    "summary": "This file contains a function named `printHello` that logs the string \"hello Operon Multilingual\" to the console.",
+    "functions": [
+      {
+        "name": "printHello",
+        "start": 1,
+        "end": 3
+      }
+    ],
     "classes": [],
     "imports": []
   },
   "readme.md": {
-    "summary": "This file is the README for Operon, a local-first autonomous coding agent designed to modify repository functions using deterministic loop control, slice-based rewriting, and human-approved commits.",
+    "summary": "This file is a README for a local-first autonomous coding agent named Operon, which modifies repository functions using deterministic loop control, slice-based rewriting, and human-approved commits.",
     "functions": [],
     "classes": [],
     "imports": [
@@ -30,7 +36,7 @@
     ]
   },
   "repo_tree.json": {
-    "summary": "This file, `repo_tree.json`, appears to be a JSON representation of the directory structure of a software repository, listing all files and subdirectories.",
+    "summary": "This file is a JSON representation of the directory structure of a software project, listing all files and subdirectories.",
     "functions": [],
     "classes": [],
     "imports": []
@@ -58,7 +64,7 @@
     ]
   },
   "tools/universal_parser.py": {
-    "summary": "This file provides functions to parse, check syntax, and extract symbols from code in various programming languages using the Tree-sitter library.",
+    "summary": "This file provides functions to parse, check syntax, and extract symbols (functions and classes) from code in various programming languages using the Tree-sitter library.",
     "functions": [
       {
         "name": "get_parser",
@@ -98,7 +104,7 @@
     ]
   },
   "tools/fs_tools.py": {
-    "summary": "This file provides functions to read from and write to files, handling paths relative to a repository root and managing file modes like append and overwrite.",
+    "summary": "This file provides functions to read from and write to files in a repository, handling errors and ensuring proper file modes.",
     "functions": [
       {
         "name": "read_file",
@@ -120,7 +126,7 @@
     ]
   },
   "tools/git_tools.py": {
-    "summary": "This file contains functions to interact with Git, including running Git commands, creating branches, and committing changes.",
+    "summary": "This file contains functions to interact with Git, including running Git commands, creating branches, and committing changes with automated messages.",
     "functions": [
       {
         "name": "_run",
@@ -152,7 +158,7 @@
     ]
   },
   "tools/diff_engine.py": {
-    "summary": "This file contains functions to parse search and replace blocks from text, normalize lines for comparison, and apply patches to original text by replacing matching blocks while handling indentation differences.",
+    "summary": "This file contains functions to parse search and replace blocks from text, normalize lines for comparison, and apply patches to original text by replacing matching blocks while handling indentation and new file creation.",
     "functions": [
       {
         "name": "parse_search_replace",
@@ -167,7 +173,7 @@
       {
         "name": "apply_patch",
         "start": 16,
-        "end": 72
+        "end": 78
       }
     ],
     "classes": [],
@@ -250,7 +256,7 @@
     ]
   },
   "agent/tool_jail.py": {
-    "summary": "This file defines a dictionary `ALLOWED_ACTIONS` that specifies which actions are permitted and what parameters they require.",
+    "summary": "This file defines a set of allowed actions that an agent can perform, including searching a repository, reading a file, rewriting a function, and finishing with a message.",
     "functions": [],
     "classes": [],
     "imports": []
@@ -275,7 +281,7 @@
     ]
   },
   "agent/planner.py": {
-    "summary": "This file defines a function `make_plan` that generates a list of high-level steps to achieve a given goal using an LLM (Large Language Model).",
+    "summary": "This file defines a function `make_plan` that generates a list of high-level steps to achieve a given goal using a language model.",
     "functions": [
       {
         "name": "make_plan",
@@ -335,18 +341,18 @@
     "functions": [
       {
         "name": "_detect_function_from_goal",
-        "start": 18,
-        "end": 25
+        "start": 19,
+        "end": 26
       },
       {
         "name": "_rewrite_function",
-        "start": 27,
-        "end": 115
+        "start": 28,
+        "end": 122
       },
       {
         "name": "run_agent",
-        "start": 118,
-        "end": 291
+        "start": 125,
+        "end": 294
       }
     ],
     "classes": [],
@@ -372,8 +378,10 @@
       "pathlib",
       "re",
       "read_file",
+      "runtime",
       "search_repo",
       "smart_commit_pipeline",
+      "state",
       "time",
       "tools.code_slice",
       "tools.diff_engine",
@@ -385,7 +393,7 @@
     ]
   },
   "agent/llm.py": {
-    "summary": "This file contains a function `call_llm` that sends a prompt to a local language model server (llama.cpp/Ollama) and returns the model's response.",
+    "summary": "This file defines a function `call_llm` that sends a prompt to a local language model server and returns the response.",
     "functions": [
       {
         "name": "call_llm",
@@ -531,7 +539,7 @@
     ]
   },
   "runtime/state.py": {
-    "summary": "This file defines a data class `AgentState` that holds various attributes representing the state of an agent, including its goal, repository root, plan, files read and modified, last action, action log, observations, errors, step count, and done status.",
+    "summary": "This file defines a data class `AgentState` used to store the state of an agent, including its goal, repository root, plan, files read and modified, last action, action log, observations, errors, step count, and done status.",
     "functions": [],
     "classes": [
       {
