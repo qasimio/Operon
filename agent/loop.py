@@ -14,7 +14,8 @@ import agent.logger
 import time
 import re
 
-MAX_STEPS = 30
+# Updated by Swarm
+MAX_STEPS = 50
 
 def _detect_function_from_goal(goal, repo_root):
     clean_goal = re.sub(r"[^\w\s]", " ", goal)
@@ -181,6 +182,10 @@ def run_agent(state):
         elif act == "approve_step":
             state.action_log.append(f"👨‍⚖️ REVIEWER approved step {state.current_step + 1}: {action_payload.get('message', '')}")
             state.current_step += 1
+
+            # Wipe working memory for next step!
+            state.context_buffer = {}
+
             if state.current_step >= len(state.plan):
                 log.info("[bold green]✅ All plan steps complete! REVIEWER should finish next.[/bold green]")
             state.phase = "CODER"
@@ -217,13 +222,22 @@ def run_agent(state):
             path = action_payload.get("path")
             if not path: continue
             obs = read_file(path, state.repo_root)
+
             state.observations.append(obs)
             if "error" in obs:
                 state.action_log.append(f"Attempted to read '{path}' but failed.")
             else:
-                state.action_log.append(f"Read contents of file '{path}'.")
-                if path not in state.files_read:
-                    state.files_read.append(path)
+                if not hasattr(state, "context_buffer"):
+                    state.context_buffer = {}
+                state.context_buffer[path] = obs["content"]
+                
+                # Keep the episodic memory light and strictly chronological
+                summary_obs = {"success": True, "action": "read_file", "path": path, "lines": len(obs["content"].splitlines())}
+                state.observations.append(summary_obs)
+                state.action_log.append(f"SUCCESS: Read '{path}' into Context Buffer.")
+                
+                if path not in getattr(state, "files_read", []):
+                    state.files_read.append(path)                
 
         elif act == "rewrite_function":
             target_file = action_payload.get("file")
