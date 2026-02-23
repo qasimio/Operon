@@ -14,7 +14,7 @@ import agent.logger
 import time
 import re
 
-MAX_STEPS = 30
+MAX_STEPS = 20
 
 def _detect_function_from_goal(goal, repo_root):
     clean_goal = re.sub(r"[^\w\s]", " ", goal)
