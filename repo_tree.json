@@ -14,8 +14,10 @@
   "readme.md",
   "repo_files.json",
   "repo_tree.json",
+  "requirements.txt",
   "runtime",
   "runtime/state.py",
+  "test.js",
   "tools",
   "tools/build_brain.py",
   "tools/code_slice.py",
@@ -25,6 +27,7 @@
   "tools/git_tools.py",
   "tools/repo_brain.py",
   "tools/repo_search.py",
+  "tools/universal_parser.py",
   "tui",
   "tui/app.py"
 ]
