@@ -1,12 +1,25 @@
 {
   "main.py": {
-    "summary": "This file is the entry point for an application that initializes and runs an instance of the `OperonUI` class, which is part of a TUI (Text User Interface) module.",
+    "summary": "This file is the entry point for an application that initializes and runs an instance of `OperonUI`, a user interface component, handling graceful shutdown on keyboard interrupts.",
     "functions": [],
     "classes": [],
     "imports": [
+      "OperonUI",
       "sys",
-      "OperonUI"
+      "tui.app"
     ]
+  },
+  "requirements.txt": {
+    "summary": "This file lists the Python packages and their versions required by a project.",
+    "functions": [],
+    "classes": [],
+    "imports": []
+  },
+  "test.js": {
+    "summary": "This file outputs \"hello world\" to the console.",
+    "functions": [],
+    "classes": [],
+    "imports": []
   },
   "readme.md": {
     "summary": "This file is the README for Operon, a local-first autonomous coding agent designed to modify repository functions using deterministic loop control, slice-based rewriting, and human-approved commits.",
@@ -17,7 +30,7 @@
     ]
   },
   "repo_tree.json": {
-    "summary": "This file represents the structure of a repository, listing all files and directories within it.",
+    "summary": "This file, `repo_tree.json`, appears to be a JSON representation of the directory structure of a software repository, listing all files and subdirectories.",
     "functions": [],
     "classes": [],
     "imports": []
@@ -29,7 +42,7 @@
     "imports": []
   },
   "tools/function_locator.py": {
-    "summary": "This file defines a function `find_function` that searches a JSON file containing repository information for a specific function or class by name and returns its file path and line range.",
+    "summary": "This file defines a function `find_function` that searches for a function or class by name within a repository, returning its file path and line range if found.",
     "functions": [
       {
         "name": "find_function",
@@ -39,12 +52,53 @@
     ],
     "classes": [],
     "imports": [
+      "Path",
       "json",
-      "Path"
+      "pathlib"
+    ]
+  },
+  "tools/universal_parser.py": {
+    "summary": "This file provides functions to parse, check syntax, and extract symbols from code in various programming languages using the Tree-sitter library.",
+    "functions": [
+      {
+        "name": "get_parser",
+        "start": 18,
+        "end": 25
+      },
+      {
+        "name": "check_syntax",
+        "start": 28,
+        "end": 35
+      },
+      {
+        "name": "extract_symbols",
+        "start": 38,
+        "end": 97
+      },
+      {
+        "name": "get_node_name",
+        "start": 65,
+        "end": 76
+      },
+      {
+        "name": "walk",
+        "start": 78,
+        "end": 94
+      }
+    ],
+    "classes": [],
+    "imports": [
+      "Language",
+      "Path",
+      "pathlib",
+      "tree_sitter",
+      "tree_sitter_java",
+      "tree_sitter_javascript",
+      "tree_sitter_python"
     ]
   },
   "tools/fs_tools.py": {
-    "summary": "This file provides functions to read from and write to files, returning detailed success or error information.",
+    "summary": "This file provides functions to read from and write to files, handling paths relative to a repository root and managing file modes like append and overwrite.",
     "functions": [
       {
         "name": "read_file",
@@ -59,12 +113,14 @@
     ],
     "classes": [],
     "imports": [
+      "Dict",
       "Path",
-      "Dict"
+      "pathlib",
+      "typing"
     ]
   },
   "tools/git_tools.py": {
-    "summary": "This file contains functions to interact with Git repositories, including running Git commands, creating branches, and committing changes with automated messages.",
+    "summary": "This file contains functions to interact with Git, including running Git commands, creating branches, and committing changes.",
     "functions": [
       {
         "name": "_run",
@@ -89,9 +145,10 @@
     ],
     "classes": [],
     "imports": [
-      "subprocess",
+      "agent.logger",
+      "log",
       "re",
-      "log"
+      "subprocess"
     ]
   },
   "tools/diff_engine.py": {
@@ -119,16 +176,18 @@
     ]
   },
   "tools/build_brain.py": {
-    "summary": "This file initializes the repository brain by calling the `build_repo_brain` function from the `tools.repo_brain` module and passing the path to the repository and a language model call function from the `agent.llm` module.",
+    "summary": "This file initializes a repository brain by calling a function from another module.",
     "functions": [],
     "classes": [],
     "imports": [
+      "agent.llm",
       "build_repo_brain",
-      "call_llm"
+      "call_llm",
+      "tools.repo_brain"
     ]
   },
   "tools/repo_search.py": {
-    "summary": "This file defines a function `search_repo` that searches a repository for files containing specific keywords, scoring them based on the number of unique keywords found, and returns the top 5 highest-scoring files.",
+    "summary": "This file defines a function `search_repo` that searches a repository for files containing specific keywords and returns the top 5 files with the highest scores.",
     "functions": [
       {
         "name": "search_repo",
@@ -138,80 +197,43 @@
     ],
     "classes": [],
     "imports": [
+      "Path",
       "json",
-      "Path"
+      "pathlib"
     ]
   },
   "tools/repo_brain.py": {
-    "summary": "Provides functions build_tree, extract_python_info, build_repo_brain, extract_python_structure_ast, Visitor.visit_FunctionDef and classes Visitor.",
+    "summary": "Provides functions build_tree, extract_imports_regex, build_repo_brain and classes .",
     "functions": [
       {
         "name": "build_tree",
         "start": 12,
-        "end": 25
+        "end": 21
       },
       {
-        "name": "extract_python_info",
-        "start": 28,
+        "name": "extract_imports_regex",
+        "start": 24,
         "end": 34
       },
       {
         "name": "build_repo_brain",
-        "start": 36,
-        "end": 119
-      },
-      {
-        "name": "extract_python_structure_ast",
-        "start": 121,
-        "end": 171
-      },
-      {
-        "name": "Visitor.visit_FunctionDef",
-        "start": 135,
-        "end": 141
-      },
-      {
-        "name": "Visitor.visit_AsyncFunctionDef",
-        "start": 143,
-        "end": 149
-      },
-      {
-        "name": "Visitor.visit_ClassDef",
-        "start": 151,
-        "end": 167
-      },
-      {
-        "name": "visit_FunctionDef",
-        "start": 135,
-        "end": 141
-      },
-      {
-        "name": "visit_AsyncFunctionDef",
-        "start": 143,
-        "end": 149
-      },
-      {
-        "name": "visit_ClassDef",
-        "start": 151,
-        "end": 167
+        "start": 37,
+        "end": 116
       }
     ],
-    "classes": [
-      {
-        "name": "Visitor",
-        "start": 133,
-        "end": 167
-      }
-    ],
+    "classes": [],
     "imports": [
       "Path",
+      "detection.",
+      "extract_symbols",
       "json",
+      "pathlib",
       "re",
-      "ast"
+      "tools.universal_parser"
     ]
   },
   "tools/code_slice.py": {
-    "summary": "This file defines a function `load_function_slice` that loads and returns the code snippet surrounding a specified function or class within a given repository.",
+    "summary": "This file defines a function `load_function_slice` that loads and returns the lines of code surrounding a specified function or class within a repository.",
     "functions": [
       {
         "name": "load_function_slice",
@@ -222,11 +244,13 @@
     "classes": [],
     "imports": [
       "Path",
-      "find_function"
+      "find_function",
+      "pathlib",
+      "tools.function_locator"
     ]
   },
   "agent/tool_jail.py": {
-    "summary": "This file defines a set of allowed actions for an agent, including searching a repository, reading a file, rewriting a function in a file, and finishing with a message.",
+    "summary": "This file defines a dictionary `ALLOWED_ACTIONS` that specifies which actions are permitted and what parameters they require.",
     "functions": [],
     "classes": [],
     "imports": []
@@ -242,14 +266,16 @@
     ],
     "classes": [],
     "imports": [
-      "json",
-      "re",
+      "agent.llm",
+      "agent.logger",
       "call_llm",
-      "log"
+      "json",
+      "log",
+      "re"
     ]
   },
   "agent/planner.py": {
-    "summary": "This file defines a function `make_plan` that generates a list of high-level steps to achieve a given goal using a language model.",
+    "summary": "This file defines a function `make_plan` that generates a list of high-level steps to achieve a given goal using an LLM (Large Language Model).",
     "functions": [
       {
         "name": "make_plan",
@@ -259,6 +285,7 @@
     ],
     "classes": [],
     "imports": [
+      "agent.llm",
       "call_llm"
     ]
   },
@@ -277,13 +304,8 @@
     ]
   },
   "agent/logger.py": {
-    "summary": "This file defines a custom logging handler for a UI-based application, allowing logs to be displayed both in a file and through a user interface.",
+    "summary": "This file sets up a logging system that writes logs to both a file and a user interface, with different formatting for each output.",
     "functions": [
-      {
-        "name": "TUILogHandler.emit",
-        "start": 11,
-        "end": 16
-      },
       {
         "name": "emit",
         "start": 11,
@@ -304,12 +326,12 @@
     ],
     "imports": [
       "logging",
-      "sys",
-      "queue"
+      "queue",
+      "sys"
     ]
   },
   "agent/loop.py": {
-    "summary": "This file contains functions for detecting functions from a goal, rewriting functions based on a state and code to modify, and running an agent to perform these tasks.",
+    "summary": "This file contains functions for detecting functions from a goal, rewriting functions based on a given state and code, and running an agent to manage the code editing process.",
     "functions": [
       {
         "name": "_detect_function_from_goal",
@@ -319,42 +341,51 @@
       {
         "name": "_rewrite_function",
         "start": 27,
-        "end": 117
+        "end": 115
       },
       {
         "name": "run_agent",
-        "start": 120,
-        "end": 293
+        "start": 118,
+        "end": 291
       }
     ],
     "classes": [],
     "imports": [
-      "search_repo",
+      "ALLOWED_ACTIONS",
+      "AND",
+      "Path",
+      "agent.approval",
+      "agent.decide",
+      "agent.llm",
+      "agent.logger",
+      "agent.planner",
+      "agent.tool_jail",
       "ask_user_approval",
+      "call_llm",
+      "check_syntax",
       "decide_next_action",
-      "make_plan",
-      "log",
-      "read_file",
       "find_function",
       "load_function_slice",
-      "call_llm",
-      "Path",
-      "agent.logger",
-      "ast",
-      "time",
-      "re",
-      "Path",
+      "log",
+      "make_plan",
       "parse_search_replace",
-      "ask_user_approval",
-      "AND",
-      "ALLOWED_ACTIONS",
+      "pathlib",
+      "re",
+      "read_file",
+      "search_repo",
+      "smart_commit_pipeline",
       "time",
-      "Path",
-      "smart_commit_pipeline"
+      "tools.code_slice",
+      "tools.diff_engine",
+      "tools.fs_tools",
+      "tools.function_locator",
+      "tools.git_tools",
+      "tools.repo_search",
+      "tools.universal_parser"
     ]
   },
   "agent/llm.py": {
-    "summary": "This file contains a function `call_llm` that sends a prompt to a local language model server and returns the response.",
+    "summary": "This file contains a function `call_llm` that sends a prompt to a local language model server (llama.cpp/Ollama) and returns the model's response.",
     "functions": [
       {
         "name": "call_llm",
@@ -364,13 +395,14 @@
     ],
     "classes": [],
     "imports": [
-      "requests",
+      "agent.logger",
       "json",
-      "log"
+      "log",
+      "requests"
     ]
   },
   "agent/repo.py": {
-    "summary": "This file defines a function `build_repo_summary` that takes a repository root directory and an optional maximum number of files to list, then returns a string containing the paths of up to that many files in the repository, excluding files in the `.git` directory.",
+    "summary": "This file defines a function `build_repo_summary` that generates a summary of files in a repository, listing up to a specified maximum number of files, excluding files within the `.git` directory.",
     "functions": [
       {
         "name": "build_repo_summary",
@@ -380,32 +412,13 @@
     ],
     "classes": [],
     "imports": [
-      "Path"
+      "Path",
+      "pathlib"
     ]
   },
   "tui/app.py": {
-    "summary": "This file defines a text-based user interface (TUI) for an application called Operon, which includes features for displaying and approving code changes.",
+    "summary": "This file defines a Textual User Interface (TUI) for an application called Operon, which allows users to interact with an agent for software engineering tasks, including viewing and approving code changes.",
     "functions": [
-      {
-        "name": "DiffApproval.__init__",
-        "start": 18,
-        "end": 22
-      },
-      {
-        "name": "DiffApproval.compose",
-        "start": 24,
-        "end": 30
-      },
-      {
-        "name": "DiffApproval.on_mount",
-        "start": 32,
-        "end": 40
-      },
-      {
-        "name": "DiffApproval.on_button_pressed",
-        "start": 42,
-        "end": 47
-      },
       {
         "name": "__init__",
         "start": 18,
@@ -425,56 +438,6 @@
         "name": "on_button_pressed",
         "start": 42,
         "end": 47
-      },
-      {
-        "name": "OperonUI.compose",
-        "start": 66,
-        "end": 74
-      },
-      {
-        "name": "OperonUI.on_mount",
-        "start": 76,
-        "end": 84
-      },
-      {
-        "name": "OperonUI.on_key",
-        "start": 86,
-        "end": 94
-      },
-      {
-        "name": "OperonUI.on_input_submitted",
-        "start": 96,
-        "end": 109
-      },
-      {
-        "name": "OperonUI.execute_agent",
-        "start": 111,
-        "end": 115
-      },
-      {
-        "name": "OperonUI.safe_update_log",
-        "start": 117,
-        "end": 118
-      },
-      {
-        "name": "OperonUI._write_to_log",
-        "start": 120,
-        "end": 121
-      },
-      {
-        "name": "OperonUI.safe_show_diff",
-        "start": 123,
-        "end": 124
-      },
-      {
-        "name": "OperonUI._render_approval_ui",
-        "start": 126,
-        "end": 134
-      },
-      {
-        "name": "OperonUI.resolve_approval",
-        "start": 136,
-        "end": 150
       },
       {
         "name": "compose",
@@ -540,24 +503,35 @@
       }
     ],
     "imports": [
-      "os",
-      "sys",
-      "App",
-      "Horizontal",
-      "Header",
-      "Key",
-      "Text",
-      "Panel",
-      "Group",
-      "Syntax",
-      "cast",
       "AgentState",
+      "App",
+      "Group",
+      "Header",
+      "Horizontal",
+      "Key",
+      "Panel",
+      "Syntax",
+      "Text",
+      "agent.logger",
+      "agent.loop",
+      "cast",
+      "os",
+      "rich.console",
+      "rich.panel",
+      "rich.syntax",
+      "rich.text",
       "run_agent",
-      "agent.logger"
+      "runtime.state",
+      "sys",
+      "textual.app",
+      "textual.containers",
+      "textual.events",
+      "textual.widgets",
+      "typing"
     ]
   },
   "runtime/state.py": {
-    "summary": "This file defines a data class `AgentState` that holds various attributes representing the state of an agent, including its goal, repository root, plan, files read and modified, last action, action log, observations, errors, step count, and whether the task is done.",
+    "summary": "This file defines a data class `AgentState` that holds various attributes representing the state of an agent, including its goal, repository root, plan, files read and modified, last action, action log, observations, errors, step count, and done status.",
     "functions": [],
     "classes": [
       {
@@ -567,8 +541,10 @@
       }
     ],
     "imports": [
+      "List",
       "dataclass",
-      "List"
+      "dataclasses",
+      "typing"
     ]
   }
 }
