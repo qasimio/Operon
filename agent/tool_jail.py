@@ -1,42 +1,30 @@
-import json
+# agent/tool_jail.py
 
-ALLOWED_ACTIONS = {
-    "search_repo": ["query"],
+CODER_TOOLS = {
+    "semantic_search": ["query"],
+    "exact_search": ["text"],
     "read_file": ["path"],
-    "rewrite_function": ["file"], 
-    "step_complete": ["message"],
+    "rewrite_function": ["file"]
+}
+
+REVIEWER_TOOLS = {
     "approve_step": ["message"],
     "reject_step": ["feedback"],
     "finish": ["message"]
 }
 
-def validate_action(raw_output: str):
-    """
-    Return (valid_dict, error_string)
-    """
-    try:
-        data = json.loads(raw_output)
-    except json.JSONDecodeError:
-        return None, "no_json"
+ALLOWED_ACTIONS = {**CODER_TOOLS, **REVIEWER_TOOLS}
 
-    if not data:
-        return None, "empty_json"
-
-    # Support nested "tool" format from Swarm update
-    if "tool" in data:
-        action_payload = data["tool"]
-    else:
-        action_payload = data
-
-    action = action_payload.get("action")
-
-    if action not in ALLOWED_ACTIONS:
-        return None, f"invalid_action:{action}"
-
-    required_fields = ALLOWED_ACTIONS[action]
-
-    for field in required_fields:
-        if field not in action_payload:
-            return None, f"missing_field:{field}"
-
-    return action_payload, None
+def validate_tool(act, payload, phase):
+    if phase == "CODER" and act not in CODER_TOOLS:
+        return False, f"CODER cannot use '{act}'. Allowed: {list(CODER_TOOLS.keys())}"
+    
+    if phase == "REVIEWER" and act not in REVIEWER_TOOLS:
+        return False, f"REVIEWER cannot use '{act}'. Allowed: {list(REVIEWER_TOOLS.keys())}"
+    
+    required_keys = ALLOWED_ACTIONS.get(act, [])
+    for key in required_keys:
+        if key not in payload:
+            return False, f"Tool '{act}' is missing required parameter '{key}'."
+            
+    return True, "Valid"
