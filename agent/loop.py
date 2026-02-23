@@ -8,8 +8,8 @@ from tools.function_locator import find_function
 from tools.code_slice import load_function_slice
 from agent.llm import call_llm
 from pathlib import Path
+from tools.universal_parser import check_syntax
 import agent.logger
-import ast
 import time
 import re
 
@@ -35,7 +35,7 @@ def _rewrite_function(state, code_to_modify, file_path):
         "CRITICAL CONTEXT:\n"
         f"You are editing: `{file_path}`\n\n"
         "CURRENT CODE:\n"
-        f"```python\n{code_to_modify}\n```\n\n"
+        f"```code\n{code_to_modify}\n```\n\n"
         "INSTRUCTIONS:\n"
         "1. Output a SEARCH block matching the exact original lines.\n"
         "2. Output a REPLACE block with the new lines.\n"
@@ -102,13 +102,11 @@ def _rewrite_function(state, code_to_modify, file_path):
         file_text = patched_text
         applied_count += 1
 
-    # SYNTAX SENTINEL
-    if file_path.endswith(".py"):
-        try:
-            ast.parse(file_text)
-        except SyntaxError as e:
-            error_msg = f"CRITICAL: SyntaxError! '{e.msg}' at line {e.lineno}. Rollback triggered."
-            return {"success": False, "error": error_msg}
+    # SYNTAX SENTINEL (Now Universal!)
+    if not check_syntax(file_text, file_path):
+        error_msg = f"CRITICAL: SyntaxError detected in {file_path}! You broke the code structure. Rollback triggered."
+        log.error(f"Syntax check failed for {file_path}.")
+        return {"success": False, "error": error_msg}
 
     if applied_count == 0:
          return {"success": False, "error": "No valid changes were generated."}
