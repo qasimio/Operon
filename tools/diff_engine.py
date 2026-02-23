@@ -17,7 +17,18 @@ def apply_patch(original_text: str, search_block: str, replace_block: str) -> st
     """
     Applies the patch exactly once. Uses a smart line-by-line matcher 
     that ignores leading/trailing whitespace differences caused by LLMs.
+    Now supports Appending and New File Creation.
     """
+    # 0. The "Append / Create" Maneuver
+    if not search_block.strip():
+        # If the search block is empty, the LLM just wants to add new code.
+        if original_text.strip():
+            # Append to existing file
+            return original_text.rstrip() + "\n\n" + replace_block.strip() + "\n"
+        else:
+            # File is completely new/empty
+            return replace_block.strip() + "\n"
+
     # 1. Try exact match first (Fastest and safest)
     if search_block in original_text:
         return original_text.replace(search_block, replace_block, 1)
@@ -34,15 +45,11 @@ def apply_patch(original_text: str, search_block: str, replace_block: str) -> st
     for i in range(len(orig_lines) - search_len + 1):
         window = orig_lines[i : i + search_len]
         window_norm = [line.strip() for line in window]
-
+        
         if window_norm == search_norm:
-            # We found the exact block of lines (ignoring outer whitespace)
-            # Now we replace this exact slice in the original lines array
-            
-            # Figure out the base indentation of the first matched line in original text
+            # We found a match! Now preserve the original indentation.
             original_indent = len(orig_lines[i]) - len(orig_lines[i].lstrip())
             
-            # We need to apply this relative indentation to the replacement block
             replace_lines = replace_block.splitlines()
             if replace_lines and replace_lines[0].strip():
                 replace_indent = len(replace_lines[0]) - len(replace_lines[0].lstrip())
@@ -61,7 +68,6 @@ def apply_patch(original_text: str, search_block: str, replace_block: str) -> st
             else:
                 adjusted_replace = replace_lines
 
-            # Construct the final file
             before = orig_lines[:i]
             after = orig_lines[i + search_len:]
             final_lines = before + adjusted_replace + after

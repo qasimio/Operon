@@ -1,3 +1,4 @@
+from runtime import state
 from tools.repo_search import search_repo
 from agent.approval import ask_user_approval
 from agent.decide import decide_next_action
@@ -29,23 +30,35 @@ def _rewrite_function(state, code_to_modify, file_path):
     from tools.diff_engine import parse_search_replace, apply_patch
     from agent.approval import ask_user_approval
     
-    prompt = (
-        "You are Operon, an elite surgical code editor.\n"
-        f"GOAL: {state.goal}\n\n"
-        "CRITICAL CONTEXT:\n"
-        f"You are editing: `{file_path}`\n\n"
-        "CURRENT CODE:\n"
-        f"```code\n{code_to_modify}\n```\n\n"
-        "INSTRUCTIONS:\n"
-        "1. Output a SEARCH block matching the exact original lines.\n"
-        "2. Output a REPLACE block with the new lines.\n"
-        "3. CRITICAL: If the user asks you to replace MULTIPLE occurrences of something, or perform MULTIPLE distinct tasks (like adding an import AND changing a function), you MUST output MULTIPLE separate <<<<<<< SEARCH / >>>>>>> REPLACE blocks. Do not stop until ALL requirements of the goal are met in this file.\n\n"
-        "EXAMPLE FORMAT:\n"
-        "<<<<<<< SEARCH\noriginal code\n=======\nnew code\n>>>>>>> REPLACE\n\n"
-        "RULES:\n"
-        "- SEARCH block must EXACTLY match character-for-character.\n"
-        "- INDENTATION IS MANDATORY.\n"
-    )
+    prompt = f"""You are Operon, an elite surgical code editor.
+GOAL: {state.goal}
+
+CRITICAL CONTEXT:
+You are editing: `{file_path}`
+
+INSTRUCTIONS:
+1. Output a SEARCH block matching the exact original lines.
+2. Output a REPLACE block with the new lines.
+3. CRITICAL: If the user asks you to replace MULTIPLE occurrences of something, or perform MULTIPLE distinct tasks (like adding an import AND changing a function), you MUST output MULTIPLE separate <<<<<<< SEARCH / >>>>>>> REPLACE blocks. Do not stop until ALL requirements of the goal are met in this file.
+
+RULES FOR EDITING:
+1. You MUST output your edits using strictly formatted SEARCH/REPLACE blocks.
+2. The SEARCH block MUST perfectly match the exact lines in the original file, including indentation.
+3. Keep the blocks small. Target only the specific function or lines that need changing.
+4. INDENTATION IS MANDATORY.
+5. **IF ADDING NEW CODE**: If you are simply appending new functions/code to the end of a file, leave the SEARCH block COMPLETELY EMPTY. Just put your new code in the REPLACE block.
+6. **IF FILE IS EMPTY**: If the file has no code in it yet, leave the SEARCH block COMPLETELY EMPTY.
+
+FORMAT REQUIREMENT:
+<<<<<<< SEARCH
+[Exact lines from the original file you want to replace]
+=======
+[The new modified lines]
+>>>>>>> REPLACE
+
+Here is the current code for `{file_path}`:
+{code_to_modify}
+Now, output the SEARCH/REPLACE block to achieve the goal."""
 
     log.debug(f"LLM Prompt for rewrite:\n{prompt}")
     raw_output = call_llm(prompt, require_json=False)
@@ -54,23 +67,12 @@ def _rewrite_function(state, code_to_modify, file_path):
     if not blocks:
         return {"success": False, "error": "LLM failed to output valid SEARCH/REPLACE blocks."}
 
-    for search_block, replace_block in blocks:
-        payload = {
-            "file": file_path,
-            "search": search_block.strip(),
-            "replace": replace_block.strip()
-        }
-    
-    if not ask_user_approval("rewrite_function", payload):
-        return {"success": False, "error": "User rejected the code change during preview."}
-
-    code_to_modify = code_to_modify.replace(search_block, replace_block)
-    if code_to_modify is None:
-        return {"success": False, "error": "Failed to apply patch. SEARCH block not found in the original code."}
-
     full_path = Path(state.repo_root) / file_path
+    
+    # Ensure file exists so we can read and write properly
     if not full_path.exists():
-        return {"success": False, "error": f"File not found: {file_path}"}
+        full_path.parent.mkdir(parents=True, exist_ok=True)
+        full_path.touch()
 
     file_text = full_path.read_text(encoding="utf-8")
     
@@ -79,22 +81,27 @@ def _rewrite_function(state, code_to_modify, file_path):
         if search_block.strip() == replace_block.strip():
             continue
 
-        # --- ASK FOR UI APPROVAL USING OUR NEW THREAD-SAFE QUEUE ---
+        # --- ASK FOR UI APPROVAL USING OUR THREAD-SAFE QUEUE (Only ONCE now!) ---
         payload = {"file": file_path, "search": search_block.strip(), "replace": replace_block.strip()}
         if not ask_user_approval("rewrite_function", payload):
             return {"success": False, "error": "User rejected the code change during preview."}
 
-        # --- APPLY PATCH ---
-        patched_text = apply_patch(file_text, search_block, replace_block)
-        
-        if patched_text is None:
-            log.warning("Strict match failed. Attempting whitespace-normalized matching...")
-            words = search_block.strip().split()
-            if words:
-                pattern = r'\s+'.join(re.escape(w) for w in words)
-                match = re.search(pattern, file_text)
-                if match:
-                    patched_text = file_text[:match.start()] + replace_block + file_text[match.end():]
+        # --- BULLETPROOF APPLY PATCH ---
+        # If the file is completely empty, ignore SEARCH entirely and just insert the code.
+        if not file_text.strip():
+            patched_text = replace_block.strip() + "\n"
+        else:
+            patched_text = apply_patch(file_text, search_block, replace_block)
+            
+            # Fallback to loose matching if exact fails
+            if patched_text is None:
+                log.warning("Strict match failed. Attempting whitespace-normalized matching...")
+                words = search_block.strip().split()
+                if words:
+                    pattern = r'\s+'.join(re.escape(w) for w in words)
+                    match = re.search(pattern, file_text)
+                    if match:
+                        patched_text = file_text[:match.start()] + replace_block + file_text[match.end():]
         
         if patched_text is None:
             return {"success": False, "error": "SEARCH block did not exactly match the file content."}
@@ -102,7 +109,7 @@ def _rewrite_function(state, code_to_modify, file_path):
         file_text = patched_text
         applied_count += 1
 
-    # SYNTAX SENTINEL (Now Universal!)
+    # SYNTAX SENTINEL (Universal parser check)
     if not check_syntax(file_text, file_path):
         error_msg = f"CRITICAL: SyntaxError detected in {file_path}! You broke the code structure. Rollback triggered."
         log.error(f"Syntax check failed for {file_path}.")
@@ -120,7 +127,6 @@ def run_agent(state):
     import time
     from pathlib import Path
 
-    # Initialize robust Episodic Memory
     if not hasattr(state, "action_log"):
         state.action_log = []
 
@@ -138,10 +144,7 @@ def run_agent(state):
     while not state.done and state.step_count < MAX_STEPS:
         decision = decide_next_action(state) or {}
         
-        # Unpack ReAct decision
         thought = decision.get("thought", "No thought process generated.")
-        
-        # Flexibly handle if LLM output {"tool": {"action": "x"}} OR just {"action": "x"}
         action_payload = decision.get("tool", decision)
 
         if not isinstance(action_payload, dict) or "action" not in action_payload:
@@ -169,7 +172,6 @@ def run_agent(state):
             state.action_log.append(f"FAILED: {err_msg}")
             time.sleep(1)
             continue
-        # ==========================================================
 
         # Programmatic Loop Breaker
         last_action_payload = getattr(state, "last_action_payload", None)
@@ -183,21 +185,18 @@ def run_agent(state):
             time.sleep(1)
             continue 
 
-        # --- LOGGING THE AGENT'S THOUGHT PROCESS ---
         log.info(f"🧠 OPERON THOUGHT: {thought}")
         log.info(f"⚙️ EXECUTING TOOL: {act}")
         log.debug(f"Tool payload: {action_payload}")
 
         # ================= ROUTING =================
         if act == "finish":
-            # PREMATURE FINISH SAFEGUARD
             if not getattr(state, "files_modified", []):
                 log.warning("Agent tried to finish without modifying any files! System override.")
                 state.observations.append({"error": "SYSTEM OVERRIDE: You tried to finish, but you haven't patched any files yet. You must use 'rewrite_function' to achieve the goal before finishing."})
                 state.action_log.append("ERROR: Attempted premature finish without any modifications.")
                 continue
             
-            # MULTI-FILE SAFEGUARD
             files_read = getattr(state, "files_read", [])
             files_modified = getattr(state, "files_modified", [])
             if len(files_read) > len(files_modified):
@@ -229,7 +228,6 @@ def run_agent(state):
         elif act == "read_file":
             path = action_payload.get("path")
             if not path:
-                state_done = True
                 continue
             obs = read_file(path, state.repo_root)
             state.observations.append(obs)
@@ -255,15 +253,15 @@ def run_agent(state):
                 slice_data = load_function_slice(state.repo_root, target_func)
                 if slice_data: code_to_modify = slice_data["code"]
             
+            # --- FIX: SMART FILE CREATION ---
+            full_path = Path(state.repo_root) / target_file
+            if not full_path.exists():
+                log.info(f"File {target_file} not found. Creating a new empty file so Operon can write to it.")
+                full_path.parent.mkdir(parents=True, exist_ok=True)
+                full_path.touch()
+
             if not code_to_modify:
-                full_path = Path(state.repo_root) / target_file
-                if full_path.exists():
-                    code_to_modify = full_path.read_text(encoding="utf-8")
-                else:
-                    error_msg = f"File not found: {target_file}"
-                    state.observations.append({"error": error_msg})
-                    state.action_log.append(f"FAILED to rewrite: {error_msg}")
-                    continue
+                code_to_modify = full_path.read_text(encoding="utf-8")
 
             obs = _rewrite_function(state, code_to_modify, target_file)
 
@@ -280,9 +278,14 @@ def run_agent(state):
                 except Exception:
                     pass
             else:
-                err = obs.get('error')
+                err = obs.get('error') or ""
                 log.error(f"Patch failed: {err}")
+
+                if "Patch failed" in err or "did not exactly match" in err:
+                    err += " HINT: Your SEARCH block was wrong. Try matching a smaller, more unique part of the code, or leave SEARCH completely empty if appending to the bottom."
+
                 state.action_log.append(f"FAILED patch on '{target_file}'. Error: {err}")
+                state.observations.append({"error": err})
 
             state.observations.append(obs)
 

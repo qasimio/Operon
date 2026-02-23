@@ -1,1 +1,3 @@
-console.log("hello world");
+function printHello() {
+    console.log("hello Operon Multilingual");
+}
