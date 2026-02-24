@@ -18,6 +18,8 @@ CRITICAL RULES:
 1. DO NOT output execution steps like "search for X", "read file Y", or "rewrite function". The Coder knows how to do its job.
 2. Output ONLY the actual coding objectives.
 3. Keep it as few steps as possible. If it's a simple task, a 1-step plan is perfect.
+4. NEVER output vague steps like "Investigate the codebase", "Analyze", or "Complete the objective".
+5. Name the EXACT files and EXACT variables that need changing based on the user's prompt.
 
 BAD PLAN:
 1. Search for max_steps

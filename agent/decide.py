@@ -21,15 +21,16 @@ def decide_next_action(state) -> dict:
         
         tactical_advice = ""
         if loaded_files:
-            tactical_advice = f"🚨 TACTICAL AWARENESS: You have {loaded_files} loaded. Use 'rewrite_function' NOW. Do not search again unless absolutely necessary."
+            tactical_advice = f"🚨 TACTICAL AWARENESS: You have {loaded_files} loaded. Use 'edit_files' NOW to apply changes. Do not search again."
         elif "exact_search" in history or "semantic_search" in history:
             tactical_advice = "🚨 TACTICAL AWARENESS: You just searched. You must now use 'read_file' on the best result."
 
         tools = """
-1. {"action": "exact_search", "text": "variable_name"} (USE THIS to find exact variables, functions, or strings)
-2. {"action": "semantic_search", "query": "conceptual question"} (USE THIS for vague concepts)
+1. {"action": "exact_search", "text": "variable_name"}
+2. {"action": "semantic_search", "query": "concept"}
 3. {"action": "read_file", "path": "exact/path.py"}
-4. {"action": "rewrite_function", "file": "exact/path.py"}"""
+4. {"action": "edit_files", "files": ["path1.py", "path2.py"]} (Applies code changes to one OR multiple files simultaneously)
+5. {"action": "run_command", "command": "pytest test.py"} (Run tests, scripts, or bash commands to verify your work)"""
 
         task = f"Execute this Milestone: '{current_step_text}'\n{tactical_advice}"
 

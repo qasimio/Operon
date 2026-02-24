@@ -4,7 +4,9 @@ CODER_TOOLS = {
     "semantic_search": ["query"],
     "exact_search": ["text"],
     "read_file": ["path"],
-    "rewrite_function": ["file"]
+    # "rewrite_function": ["file"]
+    "edit_files": ["files"],
+    "run_command": ["command"]
 }
 
 REVIEWER_TOOLS = {

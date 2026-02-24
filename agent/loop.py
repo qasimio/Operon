@@ -1,3 +1,5 @@
+from time import time
+
 from tools.repo_search import search_repo
 from agent.decide import decide_next_action
 from agent.planner import make_plan
@@ -19,98 +21,116 @@ def _detect_function_from_goal(goal, repo_root):
             return w, loc
     return None, None
 
-def _rewrite_function(state, code_to_modify, file_path):
+def _edit_files(state, files_to_modify):
     from pathlib import Path
-    from tools.diff_engine import parse_search_replace, apply_patch
+    from tools.diff_engine import apply_patch
     from agent.approval import ask_user_approval
-    
-# Inside _rewrite_function in agent/loop.py, update the prompt variable:
+    from tools.universal_parser import check_syntax
+    import os
+
+    # 1. Load context
+    file_contexts = ""
+    for f in files_to_modify:
+        full_path = Path(state.repo_root) / f
+        if not full_path.exists():
+            full_path.parent.mkdir(parents=True, exist_ok=True)
+            full_path.touch()
+        content = full_path.read_text(encoding="utf-8")
+        file_contexts += f"\n### FILE: {f} ###\n{content}\n"
 
     prompt = f"""You are Operon, an elite surgical code editor.
 GOAL: {state.goal}
 
-CRITICAL CONTEXT:
-You are editing: `{file_path}`
+CRITICAL CONTEXT (Files loaded for editing):
+{file_contexts}
 
 INSTRUCTIONS:
-1. Output a SEARCH block matching the exact original lines.
-2. Output a REPLACE block with the new lines.
-3. CRITICAL RULES:
-   - DO NOT wrap your output in ```python or ```markdown blocks. Output the raw <<<<<<< SEARCH format directly.
-   - The SEARCH block MUST perfectly match the exact lines in the original file, including indentation.
-   - If adding to the very end of a file, leave the SEARCH block COMPLETELY EMPTY.
+You can edit multiple files at once. For EACH edit, you MUST specify the file path exactly as shown above, followed by the SEARCH/REPLACE block. 
+The SEARCH block must be a SHORT, UNIQUE snippet (3-10 lines) of the file where the change goes. DO NOT output the entire file.
 
 FORMAT REQUIREMENT:
+### FILE: path/to/file.py ###
 <<<<<<< SEARCH
-[Exact lines from the original file you want to replace]
+[Exact lines from the original file]
 =======
-[The new modified lines]
+[New modified lines]
 >>>>>>> REPLACE
 
-Here is the current code for `{file_path}`:
-{code_to_modify}
-Now, output the raw SEARCH/REPLACE block to achieve the goal."""
-
-    log.debug(f"LLM Prompt for rewrite:\n{prompt}")
+RULES:
+1. DO NOT wrap your output in ```python blocks.
+2. The SEARCH block MUST perfectly match the exact lines in the original file, including leading spaces.
+3. Repeat the FILE/SEARCH/REPLACE block for every file you need to modify.
+"""
+    from agent.llm import call_llm
+    from agent.logger import log
     raw_output = call_llm(prompt, require_json=False)
-    
-    blocks = parse_search_replace(raw_output)
+
+    # 2. BULLETPROOF STATE MACHINE PARSER
+    blocks = []
+    current_file = None
+    current_search = []
+    current_replace = []
+    state_mode = "LOOKING_FOR_FILE" # States: LOOKING_FOR_FILE, IN_SEARCH, IN_REPLACE
+
+    for line in raw_output.splitlines():
+        if line.startswith("### FILE:"):
+            current_file = line.replace("### FILE:", "").replace("###", "").strip()
+            state_mode = "LOOKING_FOR_FILE"
+        elif line.startswith("<<<<<<< SEARCH"):
+            state_mode = "IN_SEARCH"
+        elif line.startswith("======="):
+            state_mode = "IN_REPLACE"
+        elif line.startswith(">>>>>>> REPLACE"):
+            if current_file:
+                blocks.append({
+                    "file": current_file,
+                    "search": "\n".join(current_search),
+                    "replace": "\n".join(current_replace)
+                })
+            current_search, current_replace = [], []
+            state_mode = "LOOKING_FOR_FILE"
+        else:
+            if state_mode == "IN_SEARCH": current_search.append(line)
+            elif state_mode == "IN_REPLACE": current_replace.append(line)
+
     if not blocks:
-        return {"success": False, "error": "LLM failed to output valid SEARCH/REPLACE blocks."}
+        return {"success": False, "error": "LLM failed to output valid FILE/SEARCH/REPLACE blocks."}
 
-    full_path = Path(state.repo_root) / file_path
-    
-    # Ensure file exists so we can read and write properly
-    if not full_path.exists():
-        full_path.parent.mkdir(parents=True, exist_ok=True)
-        full_path.touch()
-
-    file_text = full_path.read_text(encoding="utf-8")
-    
     applied_count = 0
-    for search_block, replace_block in blocks:
-        if search_block.strip() == replace_block.strip():
-            continue
+    files_changed = set()
 
-        # --- ASK FOR UI APPROVAL USING OUR THREAD-SAFE QUEUE (Only ONCE now!) ---
-        payload = {"file": file_path, "search": search_block.strip(), "replace": replace_block.strip()}
-        if not ask_user_approval("rewrite_function", payload):
-            return {"success": False, "error": "User rejected the code change during preview."}
+    for block in blocks:
+        file_path = block["file"]
+        search_block = block["search"]
+        replace_block = block["replace"]
+        
+        full_path = Path(state.repo_root) / file_path
+        file_text = full_path.read_text(encoding="utf-8")
 
-        # --- BULLETPROOF APPLY PATCH ---
-        # If the file is completely empty, ignore SEARCH entirely and just insert the code.
+        if search_block.strip() == replace_block.strip(): continue
+
+        # --- THE HARD STOP APPROVAL ---
+        if not ask_user_approval("edit_files", {"file": file_path, "search": search_block, "replace": replace_block}):
+            return {"success": False, "error": f"User rejected changes for {file_path}."}
+
+        # --- APPLY PATCH ---
         if not file_text.strip():
-            patched_text = replace_block.strip() + "\n"
+            patched_text = replace_block + "\n"
         else:
             patched_text = apply_patch(file_text, search_block, replace_block)
             
-            # Fallback to loose matching if exact fails
-            if patched_text is None:
-                log.warning("Strict match failed. Attempting whitespace-normalized matching...")
-                words = search_block.strip().split()
-                if words:
-                    pattern = r'\s+'.join(re.escape(w) for w in words)
-                    match = re.search(pattern, file_text)
-                    if match:
-                        patched_text = file_text[:match.start()] + replace_block + file_text[match.end():]
-        
         if patched_text is None:
-            return {"success": False, "error": "SEARCH block did not exactly match the file content."}
-            
-        file_text = patched_text
+            return {"success": False, "error": f"SEARCH block did not match in {file_path}. Make sure you copy the exact indentation."}
+
+        # SYNTAX CHECK
+        if not check_syntax(patched_text, file_path):
+            return {"success": False, "error": f"SyntaxError detected in {file_path}. Rollback triggered."}
+
+        full_path.write_text(patched_text, encoding="utf-8")
         applied_count += 1
+        files_changed.add(file_path)
 
-    # SYNTAX SENTINEL (Universal parser check)
-    if not check_syntax(file_text, file_path):
-        error_msg = f"CRITICAL: SyntaxError detected in {file_path}! You broke the code structure. Rollback triggered."
-        log.error(f"Syntax check failed for {file_path}.")
-        return {"success": False, "error": error_msg}
-
-    if applied_count == 0:
-         return {"success": False, "error": "No valid changes were generated."}
-
-    full_path.write_text(file_text, encoding="utf-8")
-    return {"success": True, "file": file_path, "message": f"Applied {applied_count} patch(es). Syntax valid."}
+    return {"success": True, "files": list(files_changed), "message": f"Applied {applied_count} patches."}
 
 def run_agent(state):
     from agent.tool_jail import validate_tool
@@ -237,29 +257,48 @@ def run_agent(state):
                 state.observations.append({"success": f"Loaded {path} into memory."})
                 state.action_log.append(f"Loaded '{path}' into memory.")
 
-        elif act == "rewrite_function":
-            target_file = action_payload.get("file")
-            full_path = Path(state.repo_root) / target_file
-            if not full_path.exists(): full_path.touch()
-
-            code_to_modify = full_path.read_text(encoding="utf-8")
-            obs = _rewrite_function(state, code_to_modify, target_file)
+        elif act == "edit_files":
+            targets = action_payload.get("files", [])
+            if isinstance(targets, str): targets = [targets] # Catch LLM hallucinating a string instead of array
+            
+            obs = _edit_files(state, targets)
 
             if obs.get("success"):
-                log.info(f"Successfully patched {target_file}")
-                state.action_log.append(f"SUCCESS: Applied code patch to '{target_file}'.")
+                changed_files = obs.get("files", [])
+                log.info(f"Successfully patched {changed_files}")
+                state.action_log.append(f"SUCCESS: Applied code patch to {changed_files}.")
                 
                 # --- THE AUTO-HANDOFF ---
                 log.info("[bold cyan]🔄 Auto-Handing off to REVIEWER...[/bold cyan]")
                 state.phase = "REVIEWER"
-                state.context_buffer = {} # Wipe coder memory to prevent repeating
-                state.observations.append({"system": f"Coder successfully modified {target_file}. Verify if the step is complete."})
+                state.context_buffer = {} # Wipe coder memory
+                state.observations.append({"system": f"Coder successfully modified {changed_files}. Verify if the milestone is complete."})
             else:
                 err = obs.get('error') or "Patch failed."
                 log.error(err)
-                state.action_log.append(f"FAILED patch on '{target_file}'.")
+                state.action_log.append(f"FAILED multi-file patch.")
                 state.observations.append({"error": err})
 
-        time.sleep(0.2)
+        elif act == "run_command":
+            import subprocess
+            cmd = action_payload.get("command", "")
+            log.info(f"[bold green]💻 Running in terminal:[/bold green] {cmd}")
+            try:
+                result = subprocess.run(cmd, shell=True, cwd=state.repo_root, capture_output=True, text=True, timeout=15)
+                output = result.stdout if result.returncode == 0 else result.stderr
+                output = output[:2000] # Truncate massive logs so we don't blow up context
+                obs = f"Exit Code: {result.returncode}\nOutput:\n{output}"
+                state.action_log.append(f"Ran command: {cmd}")
+            except subprocess.TimeoutExpired:
+                obs = "Command timed out after 15 seconds."
+                state.action_log.append(f"Command timed out: {cmd}")
+            except Exception as e:
+                obs = f"Execution failed: {str(e)}"
+                state.action_log.append(f"Failed to run: {cmd}")
+            
+            state.observations.append({"terminal": obs})
+               
+            
+    time.sleep(0.2)
 
     return state
