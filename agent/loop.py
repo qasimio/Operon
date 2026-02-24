@@ -266,16 +266,21 @@ def run_agent(state):
                 log.info(f"Successfully patched {target_file}")
                 state.action_log.append(f"SUCCESS: Applied code patch to '{target_file}'.")
                 
-                # --- THE AUTO-HANDOFF ---
+                # --- THE AUTO-HANDOFF (FIXED) ---
                 log.info("[bold cyan]🔄 Auto-Handing off to REVIEWER...[/bold cyan]")
                 state.phase = "REVIEWER"
-                state.context_buffer = {} # Wipe coder memory to prevent repeating
-                state.observations.append({"system": f"Coder successfully modified {target_file}. Verify if the step is complete."})
-            else:
-                err = obs.get('error') or "Patch failed."
-                log.error(err)
-                state.action_log.append(f"FAILED patch on '{target_file}'.")
-                state.observations.append({"error": err})
+                
+                # 1. Read the fresh, newly updated code
+                updated_code = full_path.read_text(encoding="utf-8")
+                
+                # 2. Give the Reviewer the exact file context so it isn't blind
+                state.context_buffer = {target_file: updated_code} 
+                
+                # 3. Force the Reviewer to acknowledge the update
+                state.observations.append({
+                    "system": f"Coder successfully modified {target_file}. REVIEWER MUST look at the updated file in context and verify the goal was met before rejecting.",
+                    "file_preview": updated_code[:2000] # Inject a preview so it doesn't even need to use read_file
+                })
 
         time.sleep(0.2)
 
