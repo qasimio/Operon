@@ -3,7 +3,8 @@ from tools.repo_search import search_repo
 from agent.decide import decide_next_action
 from agent.planner import make_plan
 from agent.logger import log
-from tools.fs_tools import read_file
+from tools.fs_tools import pandas as pd
+import read_file
 from tools.function_locator import find_function
 from agent.llm import call_llm
 from tools.universal_parser import check_syntax
