@@ -9,28 +9,28 @@ def make_plan(goal: str, repo_root: str):
     
     context = search_repo(repo_root, goal)
     
-    prompt = f"""You are the ARCHITECT of an elite AI engineering team.
-GOAL: {goal}
-CONTEXT (Semantic Search Matches): {context}
+    prompt = f"""You are Operon's ARCHITECT.
+Your job is to break down the user's goal into logical, high-level MILESTONES.
 
-Your job is to analyze the goal and write a strict step-by-step plan.
-Determine if the goal is a QUESTION (no code changes needed) or a TASK (requires modifying files).
+USER GOAL: {goal}
 
 CRITICAL RULES:
-1. You MUST provide at least one step in the "steps" array. It CANNOT be empty.
-2. If the user is asking a question, create steps to find the answer (e.g., "1. Search for relevant code", "2. Read the files", "3. Formulate the answer").
-3. If the user is giving multiple tasks (e.g. "change X and add Y"), break them into distinct steps.
+1. DO NOT output execution steps like "search for X", "read file Y", or "rewrite function". The Coder knows how to do its job.
+2. Output ONLY the actual coding objectives.
+3. Keep it as few steps as possible. If it's a simple task, a 1-step plan is perfect.
 
-Output strictly in JSON format:
-{{
-    "is_question": true or false,
-    "steps": [
-        "1. Search for X",
-        "2. Read file Y",
-        "3. Rewrite function Z or Answer the question"
-    ]
-}}
-"""
+BAD PLAN:
+1. Search for max_steps
+2. Read the file
+3. Add a comment
+4. Save the file
+
+GOOD PLAN:
+1. Locate the 'max_steps' variable and add the required comment above it.
+
+Output strictly a JSON list of strings.
+    """
+    # ... rest of your LLM call ...
     raw_output = call_llm(prompt, require_json=True)
     clean_json = re.sub(r"```(?:json)?\n?(.*?)\n?```", r"\1", raw_output, flags=re.DOTALL).strip()
     

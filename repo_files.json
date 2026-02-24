@@ -1,6 +1,6 @@
 {
   "main.py": {
-    "summary": "This file is the entry point for an application that initializes and runs an instance of `OperonUI`, a user interface component, and handles graceful shutdown on keyboard interrupt.",
+    "summary": "This file is the entry point for an application that initializes and runs an instance of `OperonUI`, a user interface component, handling graceful shutdown on keyboard interrupts.",
     "functions": [],
     "classes": [],
     "imports": [
@@ -28,7 +28,7 @@
     "imports": []
   },
   "readme.md": {
-    "summary": "This file is a README for a local-first autonomous coding agent named Operon, which modifies repository functions using deterministic loop control, slice-based rewriting, and human-approved commits.",
+    "summary": "This file is the README for Operon, a local-first autonomous coding agent designed to modify repository functions using deterministic loop control, slice-based rewriting, and human-approved commits.",
     "functions": [],
     "classes": [],
     "imports": [
@@ -36,7 +36,7 @@
     ]
   },
   "repo_tree.json": {
-    "summary": "This file, `repo_tree.json`, appears to be a JSON representation of the directory structure of a software project, listing all files and subdirectories within the repository.",
+    "summary": "This file, `repo_tree.json`, appears to be a JSON representation of the file structure of a software repository, listing all files and directories within it.",
     "functions": [],
     "classes": [],
     "imports": []
@@ -48,7 +48,7 @@
     "imports": []
   },
   "tools/function_locator.py": {
-    "summary": "This file defines a function `find_function` that searches for a function or class by name within a repository, returning the file path and line range if found.",
+    "summary": "This file defines a function `find_function` that searches for a function or class by name within a repository, returning its file path and line range if found.",
     "functions": [
       {
         "name": "find_function",
@@ -64,7 +64,7 @@
     ]
   },
   "tools/universal_parser.py": {
-    "summary": "This file provides functions to parse, check syntax, and extract symbols (functions and classes) from code in various programming languages using the Tree-sitter library.",
+    "summary": "This file provides functions to parse and analyze code in multiple programming languages, including Python, JavaScript, and Java, by using the Tree-sitter library.",
     "functions": [
       {
         "name": "get_parser",
@@ -104,7 +104,7 @@
     ]
   },
   "tools/fs_tools.py": {
-    "summary": "This file provides functions to read from and write to files, returning detailed success or error information.",
+    "summary": "This file provides functions to read from and write to files, handling paths relative to a repository root and providing detailed success or error responses.",
     "functions": [
       {
         "name": "read_file",
@@ -126,7 +126,7 @@
     ]
   },
   "tools/git_tools.py": {
-    "summary": "This file contains functions to interact with Git, including running Git commands, creating branches, and committing changes with automated messages.",
+    "summary": "This file contains functions to interact with Git, including running Git commands, creating branches, and committing changes.",
     "functions": [
       {
         "name": "_run",
@@ -158,7 +158,7 @@
     ]
   },
   "tools/diff_engine.py": {
-    "summary": "This file contains functions to parse and apply patches to text, handling both search-and-replace and append/create operations while accounting for whitespace differences.",
+    "summary": "This file contains functions to parse and apply patches to text, handling both exact matches and smart whitespace matching to ensure accurate updates.",
     "functions": [
       {
         "name": "parse_search_replace",
@@ -182,7 +182,7 @@
     ]
   },
   "tools/build_brain.py": {
-    "summary": "This file initializes a repository brain by calling a function from another module.",
+    "summary": "This file initializes a repository brain by calling a function from the `tools.repo_brain` module and passing a directory path and a language model function as arguments.",
     "functions": [],
     "classes": [],
     "imports": [
@@ -210,7 +210,7 @@
     ]
   },
   "tools/repo_brain.py": {
-    "summary": "Provides functions build_tree, extract_imports_regex, build_repo_brain and classes .",
+    "summary": "This file, `repo_brain.py`, is a script that analyzes a repository by building a tree of its files, extracting symbols and imports from each file, and summarizing the content using a language model. It then saves this information in JSON files named `repo_tree.json` and `repo_files.json`.",
     "functions": [
       {
         "name": "build_tree",
@@ -240,7 +240,7 @@
     ]
   },
   "tools/code_slice.py": {
-    "summary": "This file defines a function `load_function_slice` that loads and returns the lines of code surrounding a specified function in a given repository.",
+    "summary": "This file defines a function `load_function_slice` that loads and returns the code snippet surrounding a specified function or class within a repository.",
     "functions": [
       {
         "name": "load_function_slice",
@@ -297,41 +297,24 @@
     ]
   },
   "agent/tool_jail.py": {
-    "summary": "This file contains a function `validate_action` that checks if a given JSON string represents a valid action based on a predefined list of allowed actions and their required fields.",
+    "summary": "This file defines tools and validates that agents use the correct tools for their current persona (either CODER or REVIEWER) and that they provide the required parameters for each tool.",
     "functions": [
       {
-        "name": "validate_action",
-        "start": 13,
-        "end": 42
+        "name": "validate_tool",
+        "start": 19,
+        "end": 32
       }
     ],
     "classes": [],
-    "imports": [
-      "json"
-    ]
+    "imports": []
   },
   "agent/decide.py": {
-    "summary": "This file contains functions to decide the next action for either a coder or a reviewer in an AI engineering team, using prompts and tools to guide the process.",
+    "summary": "This file contains the `decide_next_action` function, which generates a prompt for an AI language model to decide the next action based on the current state of the system, including the phase, action history, observations, plan, and working memory.",
     "functions": [
       {
         "name": "decide_next_action",
-        "start": 6,
-        "end": 11
-      },
-      {
-        "name": "_run_coder",
-        "start": 13,
-        "end": 57
-      },
-      {
-        "name": "_run_reviewer",
-        "start": 59,
-        "end": 89
-      },
-      {
-        "name": "_call_and_parse",
-        "start": 91,
-        "end": 103
+        "start": 7,
+        "end": 93
       }
     ],
     "classes": [],
@@ -345,7 +328,7 @@
     ]
   },
   "agent/planner.py": {
-    "summary": "This file contains a function `make_plan` that generates a step-by-step plan for achieving a given goal by analyzing the relevant context from a repository and using a language model to provide instructions.",
+    "summary": "This file contains a function `make_plan` that generates a step-by-step plan based on a given goal and repository context, using an AI language model to analyze the goal and provide a structured plan in JSON format.",
     "functions": [
       {
         "name": "make_plan",
@@ -366,7 +349,7 @@
     ]
   },
   "agent/approval.py": {
-    "summary": "This file contains a function `ask_user_approval` that prompts the user for approval to perform a code change, specifically handling the \"rewrite_function\" action by displaying a diff and waiting for user input.",
+    "summary": "This file contains a function `ask_user_approval` that pauses a worker thread, displays an approval dialogue, and waits for user input to either approve or reject a code change.",
     "functions": [
       {
         "name": "ask_user_approval",
@@ -380,7 +363,7 @@
     ]
   },
   "agent/logger.py": {
-    "summary": "This file defines a logging system that outputs logs to both a file and a user interface (UI) handler, with different formatting for each.",
+    "summary": "This file defines a logging system that outputs logs to both a file and a user interface, with different formatting for each output.",
     "functions": [
       {
         "name": "emit",
@@ -407,7 +390,7 @@
     ]
   },
   "agent/loop.py": {
-    "summary": "This file contains functions for detecting functions from a goal, rewriting functions based on a given state and code, and running an agent to decide the next action.",
+    "summary": "This file contains functions for detecting functions from a goal, rewriting functions based on a given state and code, and running an agent to manage the code editing process.",
     "functions": [
       {
         "name": "_detect_function_from_goal",
@@ -421,13 +404,12 @@
       },
       {
         "name": "run_agent",
-        "start": 125,
-        "end": 255
+        "start": 124,
+        "end": 252
       }
     ],
     "classes": [],
     "imports": [
-      "ALLOWED_ACTIONS",
       "AND",
       "Path",
       "agent.approval",
@@ -457,11 +439,12 @@
       "tools.fs_tools",
       "tools.function_locator",
       "tools.repo_search",
-      "tools.universal_parser"
+      "tools.universal_parser",
+      "validate_tool"
     ]
   },
   "agent/llm.py": {
-    "summary": "This file defines a function `call_llm` that sends a prompt to a local language model server and returns the model's response.",
+    "summary": "This file defines a function `call_llm` that sends a prompt to a local language model server and returns the response.",
     "functions": [
       {
         "name": "call_llm",
@@ -614,7 +597,7 @@
     ]
   },
   "runtime/state.py": {
-    "summary": "This file defines a data class `AgentState` that represents the state of an agent in a multi-agent system, including its goals, current phase, plan, and various logs and counters.",
+    "summary": "This file defines a data class `AgentState` to represent the state of an agent in a multi-agent system, including its goals, current phase, plan, and various logs and counters.",
     "functions": [],
     "classes": [
       {

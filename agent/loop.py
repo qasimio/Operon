@@ -1,21 +1,14 @@
-from runtime import state
 from tools.repo_search import search_repo
-from agent.approval import ask_user_approval
 from agent.decide import decide_next_action
 from agent.planner import make_plan
 from agent.logger import log
 from tools.fs_tools import read_file
 from tools.function_locator import find_function
-from tools.code_slice import load_function_slice
 from agent.llm import call_llm
-from pathlib import Path
 from tools.universal_parser import check_syntax
-import agent.logger
-import time
 import re
 
-# Updated by Swarm
-MAX_STEPS = 50
+MAX_STEPS = 30
 
 def _detect_function_from_goal(goal, repo_root):
     clean_goal = re.sub(r"[^\w\s]", " ", goal)
@@ -31,6 +24,8 @@ def _rewrite_function(state, code_to_modify, file_path):
     from tools.diff_engine import parse_search_replace, apply_patch
     from agent.approval import ask_user_approval
     
+# Inside _rewrite_function in agent/loop.py, update the prompt variable:
+
     prompt = f"""You are Operon, an elite surgical code editor.
 GOAL: {state.goal}
 
@@ -40,15 +35,10 @@ You are editing: `{file_path}`
 INSTRUCTIONS:
 1. Output a SEARCH block matching the exact original lines.
 2. Output a REPLACE block with the new lines.
-3. CRITICAL: If the user asks you to replace MULTIPLE occurrences of something, or perform MULTIPLE distinct tasks (like adding an import AND changing a function), you MUST output MULTIPLE separate <<<<<<< SEARCH / >>>>>>> REPLACE blocks. Do not stop until ALL requirements of the goal are met in this file.
-
-RULES FOR EDITING:
-1. You MUST output your edits using strictly formatted SEARCH/REPLACE blocks.
-2. The SEARCH block MUST perfectly match the exact lines in the original file, including indentation.
-3. Keep the blocks small. Target only the specific function or lines that need changing.
-4. INDENTATION IS MANDATORY.
-5. **IF ADDING NEW CODE**: If you are simply appending new functions/code to the end of a file, leave the SEARCH block COMPLETELY EMPTY. Just put your new code in the REPLACE block.
-6. **IF FILE IS EMPTY**: If the file has no code in it yet, leave the SEARCH block COMPLETELY EMPTY.
+3. CRITICAL RULES:
+   - DO NOT wrap your output in ```python or ```markdown blocks. Output the raw <<<<<<< SEARCH format directly.
+   - The SEARCH block MUST perfectly match the exact lines in the original file, including indentation.
+   - If adding to the very end of a file, leave the SEARCH block COMPLETELY EMPTY.
 
 FORMAT REQUIREMENT:
 <<<<<<< SEARCH
@@ -59,7 +49,7 @@ FORMAT REQUIREMENT:
 
 Here is the current code for `{file_path}`:
 {code_to_modify}
-Now, output the SEARCH/REPLACE block to achieve the goal."""
+Now, output the raw SEARCH/REPLACE block to achieve the goal."""
 
     log.debug(f"LLM Prompt for rewrite:\n{prompt}")
     raw_output = call_llm(prompt, require_json=False)
@@ -122,131 +112,135 @@ Now, output the SEARCH/REPLACE block to achieve the goal."""
     full_path.write_text(file_text, encoding="utf-8")
     return {"success": True, "file": file_path, "message": f"Applied {applied_count} patch(es). Syntax valid."}
 
-
 def run_agent(state):
-    from agent.tool_jail import ALLOWED_ACTIONS
+    from agent.tool_jail import validate_tool
     import time
     from pathlib import Path
 
-    if not hasattr(state, "action_log"):
-        state.action_log = []
+    if not hasattr(state, "action_log"): state.action_log = []
+    if not hasattr(state, "observations"): state.observations = []
+    if not hasattr(state, "context_buffer"): state.context_buffer = {}
+    if not hasattr(state, "current_step"): state.current_step = 0
+    if not hasattr(state, "loop_counter"): state.loop_counter = 0
 
     # ================= ARCHITECT PHASE =================
     if not getattr(state, "plan", None):
         state.phase = "ARCHITECT"
         state.plan, state.is_question = make_plan(state.goal, state.repo_root)
-        log.info(f"[bold magenta]🏛️ ARCHITECT PLAN (Is Question: {state.is_question}):[/bold magenta] {state.plan}")
+        log.info(f"[bold magenta]🏛️ ARCHITECT PLAN:[/bold magenta] {state.plan}")
     
-    # Hand off to the Coder to begin Step 1
     state.phase = "CODER"
 
-    while not state.done and state.step_count < MAX_STEPS:
+    while not getattr(state, "done", False) and state.step_count < MAX_STEPS:
         decision = decide_next_action(state) or {}
-        
-        thought = decision.get("thought", "No thought process generated.")
+        thought = decision.get("thought", "Thinking...")
         action_payload = decision.get("tool", decision)
 
-        if not isinstance(action_payload, dict) or "action" not in action_payload:
-            log.error("FATAL: Invalid action dict. LLM Hallucinated format.")
-            state.observations.append({"error": "SYSTEM OVERRIDE: Invalid JSON format. You MUST output a dictionary with an 'action' key."})
-            time.sleep(1)
-            continue
-
         act = action_payload.get("action")
-
-        if act not in ALLOWED_ACTIONS:
-            log.warning(f"Jail intercepted hallucinated tool: {act}")
-            state.observations.append({"error": f"SYSTEM OVERRIDE: '{act}' is not a valid tool. Allowed: {list(ALLOWED_ACTIONS.keys())}"})
+        
+        # --- 1. STRICT TOOL VALIDATION ---
+        is_valid, val_msg = validate_tool(act, action_payload, state.phase)
+        if not is_valid:
+            log.warning(f"Jail intercepted: {val_msg}")
+            state.observations.append({"error": f"SYSTEM OVERRIDE: {val_msg}"})
             time.sleep(1)
             continue
 
-        last_action_payload = getattr(state, "last_action_payload", None)
-        state.last_action_payload = action_payload
+        # --- 2. THE LOOP BREAKER ---
+        last_payload = getattr(state, "last_action_payload", None)
+        if last_payload == action_payload:
+            state.loop_counter += 1
+            log.error(f"LOOP DETECTED ({state.loop_counter}): Repeated {act}")
+            
+            if state.loop_counter >= 3:
+                log.error("CRITICAL LOOP. Wiping memory and forcing REVIEWER handoff.")
+                state.observations.append({"error": "FATAL LOOP OVERRIDE: You are stuck. Submitting for review."})
+                state.phase = "REVIEWER"
+                state.last_action_payload = None # Wipe payload to break the cycle
+                state.loop_counter = 0
+                time.sleep(1)
+                continue
+            else:
+                state.observations.append({"error": "SYSTEM OVERRIDE: You just did this exact action. DO SOMETHING ELSE."})
+                time.sleep(1)
+                continue
+        else:
+            state.loop_counter = 0 # Reset on fresh action
+            state.last_action_payload = action_payload
+
         state.step_count += 1
-
-        if last_action_payload == action_payload:
-            log.error(f"LOOP DETECTED: Agent repeated exact tool: {action_payload}")
-            state.observations.append({"error": f"SYSTEM OVERRIDE: Loop detected. Do something else."})
-            time.sleep(1)
-            continue 
-
         log.info(f"🧠 {state.phase} THOUGHT: {thought}")
-        log.info(f"⚙️ EXECUTING TOOL: {act}")
+        log.info(f"⚙️ EXECUTING: {act}")
 
-        # ================= MULTI-AGENT ROUTING =================
-        if act == "step_complete":
-            state.action_log.append(f"👨‍💻 CODER completed step {state.current_step + 1}: {action_payload.get('message', '')}")
-            state.phase = "REVIEWER"
-            log.info(f"[bold cyan]👨‍⚖️ Handing over to REVIEWER to check step {state.current_step + 1}...[/bold cyan]")
-            
-        elif act == "approve_step":
-            state.action_log.append(f"👨‍⚖️ REVIEWER approved step {state.current_step + 1}: {action_payload.get('message', '')}")
+        # ================= ROUTING & EXECUTION =================
+        if act == "approve_step":
+            state.action_log.append(f"👨‍⚖️ REVIEWER approved step {state.current_step + 1}.")
             state.current_step += 1
-
-            # Wipe working memory for next step!
-            state.context_buffer = {}
-
-            if state.current_step >= len(state.plan):
-                log.info("[bold green]✅ All plan steps complete! REVIEWER should finish next.[/bold green]")
-            state.phase = "CODER"
-            log.info(f"[bold yellow]👨‍💻 Handing back to CODER for next step...[/bold yellow]")
             
+            if state.current_step >= len(state.plan):
+                log.info("[bold green]✅ All steps complete! REVIEWER should finish next.[/bold green]")
+                state.observations.append({"system": "All steps complete. You must use the 'finish' tool."})
+            else:
+                state.phase = "CODER"
+                state.observations = [] # Clear obs for the new step
+                log.info(f"[bold yellow]👨‍💻 Back to CODER for next step...[/bold yellow]")
+                
         elif act == "reject_step":
-            feedback = action_payload.get('feedback', 'No feedback provided.')
+            feedback = action_payload.get('feedback', '')
             state.action_log.append(f"❌ REVIEWER REJECTED step {state.current_step + 1}: {feedback}")
             state.observations.append({"reviewer_feedback": feedback})
             state.phase = "CODER"
-            log.info(f"[bold red]👨‍💻 Handing back to CODER for corrections: {feedback}[/bold red]")
+            log.info(f"[bold red]👨‍💻 Back to CODER for corrections...[/bold red]")
             
         elif act == "finish":
-            # WE DELETED THE SYSTEM OVERRIDE. WE TRUST THE REVIEWER NOW!
-            msg = action_payload.get('message', 'All tasks completed.')
-            log.info(f"✅ OPERON DECLARES VICTORY: {msg}")
-            state.action_log.append(f"Session Finished: {msg}")
+            msg = action_payload.get('message', 'Complete.')
+            log.info(f"✅ OPERON VICTORY: {msg}")
             state.done = True
             break
-        
-        # ================= STANDARD TOOLS =================
-        elif act == "search_repo":
+   # Inside your run_agent function in agent/loop.py
+
+        elif act == "semantic_search": # Renamed from search_repo
             query = action_payload.get("query", "")
-            hits = search_repo(state.repo_root, query) if query else []
-            if hits:
-                obs = {"search_results": f"Found '{query}' in: {hits}"}
-                state.action_log.append(f"Searched for '{query}'. Found {len(hits)} files.")
-            else:
-                obs = {"search_results": f"No matches found for '{query}'."}
-                state.action_log.append(f"Searched for '{query}'. Found 0 files.")
-            state.observations.append(obs)
+            hits = search_repo(state.repo_root, query) if query else [] # Your LanceDB logic
+            obs = f"Semantic matches for '{query}': {hits}" if hits else f"No matches."
+            state.observations.append({"search": obs})
+            state.action_log.append(f"Semantic search: '{query}'.")
+
+        elif act == "exact_search":
+            search_text = action_payload.get("text", "")
+            import os
+            hits = []
+            # Simple python grep equivalent
+            for root, _, files in os.walk(state.repo_root):
+                if '.git' in root or '__pycache__' in root or 'venv' in root: continue
+                for file in files:
+                    if not file.endswith('.py') and not file.endswith('.md'): continue
+                    file_path = os.path.join(root, file)
+                    try:
+                        with open(file_path, 'r', encoding='utf-8') as f:
+                            if search_text in f.read():
+                                hits.append(os.path.relpath(file_path, state.repo_root))
+                    except: pass
+            
+            obs = f"Exact matches for '{search_text}': {hits}" if hits else f"No exact matches found."
+            state.observations.append({"exact_search": obs})
+            state.action_log.append(f"Exact search for '{search_text}'.")
 
         elif act == "read_file":
             path = action_payload.get("path")
-            if not path: continue
             obs = read_file(path, state.repo_root)
-
-            state.observations.append(obs)
             if "error" in obs:
-                state.action_log.append(f"Attempted to read '{path}' but failed.")
+                state.observations.append(obs)
+                state.action_log.append(f"Failed to read '{path}'.")
             else:
-                if not hasattr(state, "context_buffer"):
-                    state.context_buffer = {}
                 state.context_buffer[path] = obs["content"]
-                
-                # Keep the episodic memory light and strictly chronological
-                summary_obs = {"success": True, "action": "read_file", "path": path, "lines": len(obs["content"].splitlines())}
-                state.observations.append(summary_obs)
-                state.action_log.append(f"SUCCESS: Read '{path}' into Context Buffer.")
-                
-                if path not in getattr(state, "files_read", []):
-                    state.files_read.append(path)                
+                state.observations.append({"success": f"Loaded {path} into memory."})
+                state.action_log.append(f"Loaded '{path}' into memory.")
 
         elif act == "rewrite_function":
             target_file = action_payload.get("file")
-            if not target_file: continue
-
             full_path = Path(state.repo_root) / target_file
-            if not full_path.exists():
-                full_path.parent.mkdir(parents=True, exist_ok=True)
-                full_path.touch()
+            if not full_path.exists(): full_path.touch()
 
             code_to_modify = full_path.read_text(encoding="utf-8")
             obs = _rewrite_function(state, code_to_modify, target_file)
@@ -254,14 +248,16 @@ def run_agent(state):
             if obs.get("success"):
                 log.info(f"Successfully patched {target_file}")
                 state.action_log.append(f"SUCCESS: Applied code patch to '{target_file}'.")
-                if target_file not in state.files_modified:
-                    state.files_modified.append(target_file) 
+                
+                # --- THE AUTO-HANDOFF ---
+                log.info("[bold cyan]🔄 Auto-Handing off to REVIEWER...[/bold cyan]")
+                state.phase = "REVIEWER"
+                state.context_buffer = {} # Wipe coder memory to prevent repeating
+                state.observations.append({"system": f"Coder successfully modified {target_file}. Verify if the step is complete."})
             else:
-                err = obs.get('error') or ""
-                log.error(f"Patch failed: {err}")
-                if "Patch failed" in err or "did not exactly match" in err:
-                    err += " HINT: Your SEARCH block was wrong. Match exact lines or leave empty to append."
-                state.action_log.append(f"FAILED patch on '{target_file}'. Error: {err}")
+                err = obs.get('error') or "Patch failed."
+                log.error(err)
+                state.action_log.append(f"FAILED patch on '{target_file}'.")
                 state.observations.append({"error": err})
 
         time.sleep(0.2)
