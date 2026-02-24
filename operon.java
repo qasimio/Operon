@@ -1,0 +1,1 @@
+public static void printMessage() { System.out.println("I am Operon - the Claude Code Killer!"); }
