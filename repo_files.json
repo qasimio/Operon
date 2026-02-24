@@ -104,17 +104,17 @@
     ]
   },
   "tools/fs_tools.py": {
-    "summary": "This file provides functions to read from and write to files, handling paths relative to a repository root and providing detailed success or error responses.",
+    "summary": "This file provides functions to read from and write to files, returning detailed success or error information.",
     "functions": [
       {
         "name": "read_file",
-        "start": 5,
-        "end": 11
+        "start": 4,
+        "end": 10
       },
       {
         "name": "write_file",
-        "start": 13,
-        "end": 39
+        "start": 12,
+        "end": 38
       }
     ],
     "classes": [],
@@ -125,40 +125,8 @@
       "typing"
     ]
   },
-  "tools/git_tools.py": {
-    "summary": "This file contains functions to interact with Git, including running Git commands, creating branches, and committing changes.",
-    "functions": [
-      {
-        "name": "_run",
-        "start": 6,
-        "end": 18
-      },
-      {
-        "name": "_current_branch",
-        "start": 21,
-        "end": 23
-      },
-      {
-        "name": "_slugify",
-        "start": 26,
-        "end": 30
-      },
-      {
-        "name": "smart_commit_pipeline",
-        "start": 33,
-        "end": 51
-      }
-    ],
-    "classes": [],
-    "imports": [
-      "agent.logger",
-      "log",
-      "re",
-      "subprocess"
-    ]
-  },
   "tools/diff_engine.py": {
-    "summary": "This file contains functions to parse and apply patches to text, handling both exact matches and smart whitespace matching to ensure accurate updates.",
+    "summary": "This file contains functions to parse and apply patches to text, handling both search-and-replace and append/create operations while accounting for whitespace differences.",
     "functions": [
       {
         "name": "parse_search_replace",
@@ -181,8 +149,40 @@
       "re"
     ]
   },
+  "tools/git_safety.py": {
+    "summary": "This file contains functions to safely run Git commands, set up a Git environment, rollback changes if a task fails, and commit successful work with a specific message prefix.",
+    "functions": [
+      {
+        "name": "run_git",
+        "start": 6,
+        "end": 12
+      },
+      {
+        "name": "setup_git_env",
+        "start": 14,
+        "end": 38
+      },
+      {
+        "name": "rollback_macro",
+        "start": 40,
+        "end": 58
+      },
+      {
+        "name": "commit_success",
+        "start": 60,
+        "end": 75
+      }
+    ],
+    "classes": [],
+    "imports": [
+      "agent.logger",
+      "log",
+      "subprocess",
+      "uuid"
+    ]
+  },
   "tools/build_brain.py": {
-    "summary": "This file initializes a repository brain by calling a function from the `tools.repo_brain` module and passing a directory path and a language model function as arguments.",
+    "summary": "This file initializes a repository brain by calling a function from another module.",
     "functions": [],
     "classes": [],
     "imports": [
@@ -240,7 +240,7 @@
     ]
   },
   "tools/code_slice.py": {
-    "summary": "This file defines a function `load_function_slice` that loads and returns the code snippet surrounding a specified function or class within a repository.",
+    "summary": "This file defines a function `load_function_slice` that retrieves the code snippet surrounding a specified function or class within a repository.",
     "functions": [
       {
         "name": "load_function_slice",
@@ -297,24 +297,24 @@
     ]
   },
   "agent/tool_jail.py": {
-    "summary": "This file defines tools and validates that agents use the correct tools for their current persona (either CODER or REVIEWER) and that they provide the required parameters for each tool.",
+    "summary": "This file defines a function `validate_tool` that checks if a given tool action is allowed for a specified phase (CODER or REVIEWER) and if it includes all required parameters.",
     "functions": [
       {
         "name": "validate_tool",
-        "start": 19,
-        "end": 32
+        "start": 18,
+        "end": 30
       }
     ],
     "classes": [],
     "imports": []
   },
   "agent/decide.py": {
-    "summary": "This file contains the `decide_next_action` function, which generates a prompt for an AI language model to decide the next action based on the current state of the system, including the phase, action history, observations, plan, and working memory.",
+    "summary": "Provides functions decide_next_action and classes .",
     "functions": [
       {
         "name": "decide_next_action",
         "start": 7,
-        "end": 93
+        "end": 82
       }
     ],
     "classes": [],
@@ -328,7 +328,7 @@
     ]
   },
   "agent/planner.py": {
-    "summary": "This file contains a function `make_plan` that generates a step-by-step plan based on a given goal and repository context, using an AI language model to analyze the goal and provide a structured plan in JSON format.",
+    "summary": "This file contains a function `make_plan` that generates a high-level plan for achieving a user's goal by breaking it down into logical milestones, using a language model to provide the plan, and handling the response to ensure it is in the correct format.",
     "functions": [
       {
         "name": "make_plan",
@@ -390,27 +390,26 @@
     ]
   },
   "agent/loop.py": {
-    "summary": "This file contains functions for detecting functions from a goal, rewriting functions based on a given state and code, and running an agent to manage the code editing process.",
+    "summary": "This file contains functions and logic for detecting functions based on goals, rewriting code files based on those goals, and managing the process through user approval and logging.",
     "functions": [
       {
         "name": "_detect_function_from_goal",
-        "start": 19,
-        "end": 26
+        "start": 14,
+        "end": 21
       },
       {
         "name": "_rewrite_function",
-        "start": 28,
-        "end": 122
+        "start": 23,
+        "end": 117
       },
       {
         "name": "run_agent",
-        "start": 124,
-        "end": 252
+        "start": 119,
+        "end": 287
       }
     ],
     "classes": [],
     "imports": [
-      "AND",
       "Path",
       "agent.approval",
       "agent.decide",
@@ -423,28 +422,27 @@
       "check_syntax",
       "decide_next_action",
       "find_function",
-      "load_function_slice",
       "log",
       "make_plan",
+      "os",
       "parse_search_replace",
       "pathlib",
       "re",
       "read_file",
-      "runtime",
       "search_repo",
-      "state",
+      "setup_git_env",
       "time",
-      "tools.code_slice",
       "tools.diff_engine",
       "tools.fs_tools",
       "tools.function_locator",
+      "tools.git_safety",
       "tools.repo_search",
       "tools.universal_parser",
       "validate_tool"
     ]
   },
   "agent/llm.py": {
-    "summary": "This file defines a function `call_llm` that sends a prompt to a local language model server and returns the response.",
+    "summary": "This file contains a function `call_llm` that sends a prompt to a local language model server and returns the response.",
     "functions": [
       {
         "name": "call_llm",
@@ -461,12 +459,12 @@
     ]
   },
   "agent/repo.py": {
-    "summary": "This file defines a function `build_repo_summary` that generates a summary of files in a repository, listing up to a specified maximum number of files, excluding files within the `.git` directory.",
+    "summary": "This file defines a function `build_repo_summary` that generates a summary of files in a repository, excluding files in the `.git` directory, and limits the output to a specified number of files.",
     "functions": [
       {
         "name": "build_repo_summary",
         "start": 3,
-        "end": 13
+        "end": 16
       }
     ],
     "classes": [],
@@ -476,7 +474,7 @@
     ]
   },
   "tui/app.py": {
-    "summary": "This file defines a Textual User Interface (TUI) for an application called Operon, which allows users to interact with an agent for software engineering tasks, including code approval and diff preview.",
+    "summary": "This file defines a Textual User Interface (TUI) for an application called Operon, which includes features for displaying chat logs, input prompts, and a diff approval widget.",
     "functions": [
       {
         "name": "__init__",
@@ -597,7 +595,7 @@
     ]
   },
   "runtime/state.py": {
-    "summary": "This file defines a data class `AgentState` to represent the state of an agent in a multi-agent system, including its goals, current phase, plan, and various logs and counters.",
+    "summary": "This file defines a data class `AgentState` that represents the state of an agent in a multi-agent system, including its goal, repository root, current phase, plan, and various logs and counters.",
     "functions": [],
     "classes": [
       {

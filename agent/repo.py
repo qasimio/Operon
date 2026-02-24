@@ -4,6 +4,9 @@ def build_repo_summary(repo_root: str, max_files: int = 15) -> str:
     root = Path(repo_root)
     files = []
 
+    name = "qasim"
+    print(name)
+
     for p in root.rglob("*"):
         if p.is_file() and ".git" not in str(p):
             files.append(str(p.relative_to(root)))
