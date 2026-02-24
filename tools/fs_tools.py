@@ -1,4 +1,3 @@
-# tools/fs_tools.py
 from pathlib import Path
 from typing import Dict
 
@@ -37,4 +36,3 @@ def write_file(path: str, content: str, repo_root: str, mode: str = "append") ->
         return {"success": True, "path": path, "mode": mode, "written_bytes": len(content)}
     except Exception as e:
         return {"success": False, "path": path, "error": str(e)}
-        
