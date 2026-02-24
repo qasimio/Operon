@@ -1,3 +1,4 @@
+from tools.git_safety import setup_git_env, rollback_macro, commit_success
 from tools.repo_search import search_repo
 from agent.decide import decide_next_action
 from agent.planner import make_plan
@@ -66,6 +67,7 @@ Now, output the raw SEARCH/REPLACE block to achieve the goal."""
         full_path.touch()
 
     file_text = full_path.read_text(encoding="utf-8")
+    original_file_text = file_text
     
     applied_count = 0
     for search_block, replace_block in blocks:
@@ -104,6 +106,8 @@ Now, output the raw SEARCH/REPLACE block to achieve the goal."""
     if not check_syntax(file_text, file_path):
         error_msg = f"CRITICAL: SyntaxError detected in {file_path}! You broke the code structure. Rollback triggered."
         log.error(f"Syntax check failed for {file_path}.")
+        # Restores the file instantly without messing with Git
+        full_path.write_text(original_file_text, encoding="utf-8")
         return {"success": False, "error": error_msg}
 
     if applied_count == 0:
@@ -126,12 +130,22 @@ def run_agent(state):
     # ================= ARCHITECT PHASE =================
     if not getattr(state, "plan", None):
         state.phase = "ARCHITECT"
+
+        state.git_state = setup_git_env(state.repo_root)
+
         state.plan, state.is_question = make_plan(state.goal, state.repo_root)
         log.info(f"[bold magenta]🏛️ ARCHITECT PLAN:[/bold magenta] {state.plan}")
     
     state.phase = "CODER"
 
-    while not getattr(state, "done", False) and state.step_count < MAX_STEPS:
+    while not getattr(state, "done", False):
+        # macro roll back
+
+        if state.step_count >= MAX_STEPS:
+            log.error(f"Hit max steps({MAX_STEPS}). Operon failed to complete the task.")
+            rollback_macro(state.repo_root, getattr(state, "git_state", {}))
+            break
+
         decision = decide_next_action(state) or {}
         thought = decision.get("thought", "Thinking...")
         action_payload = decision.get("tool", decision)
@@ -195,6 +209,9 @@ def run_agent(state):
         elif act == "finish":
             msg = action_payload.get('message', 'Complete.')
             log.info(f"✅ OPERON VICTORY: {msg}")
+
+            commit_success(state.repo_root, msg)
+
             state.done = True
             break
    # Inside your run_agent function in agent/loop.py

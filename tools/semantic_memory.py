@@ -47,7 +47,7 @@ def index_repo(repo_root: str):
 
     repo = Path(repo_root)
     ignore_dirs = {".git", ".venv", "__pycache__", "node_modules", "dist", "build", ".operon"}
-    valid_exts = {".py", ".js", ".jsx", ".ts", ".tsx", ".md", ".txt"}
+    valid_exts = {".py", ".js", ".jsx", ".ts", ".tsx", ".md", ".txt", ".java", ".cpp"}
 
     documents = []
     metadata = []
