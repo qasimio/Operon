@@ -491,9 +491,15 @@ def run_agent(state):
         _register_recent_action(state, act, canonical)
         log.debug(f"Normalized payload: {normalized_payload}")
 
-        # ----------------- Redundant read_file short-circuit -----------------
-        # If agent asks to read a file already present in state.context_buffer and
-        # the in-memory copy matches disk, skip the read to avoid repeated reads.
+        # ----------------- Redundant read_file short-circuit (improved) -----------------
+        # Reset consecutive-read counters when a different tool runs so we only count
+        # successive redundant reads (helps detect stuck state without accumulating forever).
+        if act != "read_file" and getattr(state, "skip_counts", None):
+            try:
+                state.skip_counts.clear()
+            except Exception:
+                state.skip_counts = {}
+
         if act == "read_file":
             path = normalized_payload.get("path")
             if path:
@@ -506,22 +512,43 @@ def run_agent(state):
                             disk_text = disk_path.read_text(encoding="utf-8") if disk_path.exists() else ""
                         except Exception:
                             disk_text = ""
-                        # If in-memory matches disk (or disk empty but memory present), skip
+
+                        # If in-memory matches disk (or disk empty but memory present), consider it redundant
                         if (in_memory.strip() and in_memory.strip() == disk_text.strip()) or (in_memory.strip() and not disk_text):
-                            log.info(f"SKIP: redundant read_file for '{path}' (already loaded).")
+                            # maintain per-path skip counts to detect a stuck loop
+                            if not hasattr(state, "skip_counts") or state.skip_counts is None:
+                                state.skip_counts = {}
+                            state.skip_counts[path] = state.skip_counts.get(path, 0) + 1
+
+                            log.info(f"SKIP: redundant read_file for '{path}' (already loaded). [skip#{state.skip_counts[path]}]")
                             state.observations.append({"info": f"Skipped redundant read_file: {path}"})
                             state.action_log.append(f"SKIP read_file {path}")
-                            # Reset loop counters so this doesn't count as a repeat offense
+
+                            # Reset loop counter so the redundant-read doesn't push normal loop-detection.
                             state.loop_counter = 0
+
                             # Make last action canonical a noop to avoid repeated detection
                             state.last_action_canonical = canonicalize_payload({"action": "noop", "path": path})
-                            # account for the step and continue
-                            state.step_count += 1
+
+                            # If we skipped too many times in a row for the same file, escalate to REVIEWER
+                            SKIP_THRESHOLD = 10
+                            if state.skip_counts[path] > SKIP_THRESHOLD:
+                                log.warning(f"Excessive redundant reads for '{path}' (>{SKIP_THRESHOLD}). Escalating to REVIEWER.")
+                                state.observations.append({"error": f"Too many redundant reads for {path}. Escalating to REVIEWER."})
+                                state.phase = "REVIEWER"
+                                # clear per-path skip counter to avoid repeated escalation spam
+                                state.skip_counts[path] = 0
+                                # do not count as a step — reviewer escalation is a control move
+                                time.sleep(0.1)
+                                continue
+
+                            # short sleep to avoid busy-looping, but DO NOT increment state.step_count here.
                             time.sleep(0.1)
                             continue
                 except Exception as _e:
-                    # don't allow any error here to kill the loop - just fallthrough to normal read
+                    # If our skip-check fails for some reason, fallback to normal behavior (do not crash)
                     log.debug(f"redundant-read check failed for {path}: {_e}")
+# ---------------------------------------------------------------------
 # ---------------------------------------------------------------------
 
         # short-circuit malformed/noop actions
