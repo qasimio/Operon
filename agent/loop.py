@@ -132,122 +132,245 @@ def _detect_function_from_goal(goal, repo_root):
 
 def _rewrite_function(state, code_to_modify, file_path):
     """
-    Robust rewrite:
-    - Accepts SEARCH/REPLACE blocks (preferred)
-    - Or accepts full replacement content in 'initial_content' (fallback)
-    - Dry-run changes first; skip if noop
-    - Ask user approval only for the first meaningful change (UI compatibility)
-    - Apply changes, syntax-check, write, and return result
+    Robust, integrated rewrite_function.
+
+    Features:
+    - Accepts SEARCH/REPLACE blocks (preferred).
+    - Supports deletion via empty REPLACE.
+    - Supports line-range deletion when the goal contains "delete lines X-Y".
+    - Accepts full replacement content via state.context_buffer[file_path].
+    - Dry-run all changes first and skip if noop.
+    - Single user approval for the proposed change (shaped for UI compatibility).
+    - Applies patches with strict match then whitespace-normalized fallback.
+    - Syntax-checks result with universal parser and rolls back on failure.
+    - Returns structured result dict: {"success": bool, "file": path, "message"/"error": ...}
     """
+    import re
+    from pathlib import Path
     from tools.diff_engine import parse_search_replace, apply_patch
     from agent.approval import ask_user_approval
-    from pathlib import Path
+    from agent.llm import call_llm
+    from agent.logger import log
+    from tools.universal_parser import check_syntax
 
+    # Prepare file paths
+    full_path = Path(state.repo_root) / file_path
+    full_path.parent.mkdir(parents=True, exist_ok=True)
+    if not full_path.exists():
+        full_path.touch()
+
+    # Read current file content to operate on
+    try:
+        file_text = full_path.read_text(encoding="utf-8")
+    except Exception as e:
+        log.error(f"Failed reading {full_path}: {e}")
+        file_text = ""
+
+    original_text = file_text
+
+    # --- 0) Quick support: explicit line-range deletion command in the state's goal ---
+    # e.g. "delete lines 8-11" (case-insensitive)
+    line_delete = None
+    if isinstance(getattr(state, "goal", None), str):
+        m = re.search(r"\bdelete\s+lines?\s+(\d+)\s*[-–]\s*(\d+)\b", state.goal.lower())
+        if m:
+            try:
+                start_line = int(m.group(1))
+                end_line = int(m.group(2))
+                # Clamp
+                if start_line < 1: start_line = 1
+                if end_line < start_line: end_line = start_line
+                line_delete = (start_line, end_line)
+            except Exception:
+                line_delete = None
+
+    if line_delete:
+        start, end = line_delete
+        lines = file_text.splitlines()
+        if start > len(lines):
+            return {"success": False, "error": f"Line deletion out of range: file has {len(lines)} lines."}
+
+        # Prepare preview of deletion
+        new_lines = lines[:start-1] + lines[end:]
+        new_text = "\n".join(new_lines) + ("\n" if file_text.endswith("\n") else "")
+
+        # Ask for approval showing the exact lines to be removed
+        snippet = "\n".join(lines[start-1:end])
+        preview_payload = {
+            "file": file_path,
+            "search": f"lines {start}-{end} to be deleted:\n{snippet}",
+            "replace": ""
+        }
+
+        if not ask_user_approval("rewrite_function", preview_payload):
+            return {"success": False, "error": "User rejected line-range deletion."}
+
+        # Syntax check before writing
+        if not check_syntax(new_text, str(file_path)):
+            return {"success": False, "error": f"CRITICAL: Syntax error after deleting lines {start}-{end}. Aborting."}
+
+        full_path.write_text(new_text, encoding="utf-8")
+        return {"success": True, "file": file_path, "message": f"Deleted lines {start}-{end}."}
+
+    # --- 1) Prompt LLM for SEARCH/REPLACE blocks (maintain previous prompt semantics) ---
     prompt = f"""You are Operon, an elite surgical code editor.
 GOAL: {state.goal}
 
 CRITICAL CONTEXT:
 You are editing: `{file_path}`
 
-INSTRUCTIONS: 
-1. Output SEARCH block matching exact original lines.
-2. Output REPLACE block with new lines.
-IMPORTANT PATCH RULES:
+INSTRUCTIONS:
+1) Output raw SEARCH/REPLACE blocks only, using this exact format:
 
-• To DELETE code → REPLACE must be COMPLETELY EMPTY  
-• To DELETE whole file → SEARCH must contain the entire file and REPLACE must be EMPTY  
-• To DELETE specific lines → SEARCH must contain ONLY those lines and REPLACE EMPTY  
-• NEVER explain anything outside SEARCH/REPLACE blocks  
-
-If multiple deletions required → output MULTIPLE SEARCH/REPLACE blocks.
-
-FORMAT:
 <<<<<<< SEARCH
-original
+[original exact lines to replace OR lines to delete]
 =======
-new
+[new replacement lines OR leave empty to DELETE]
 >>>>>>> REPLACE
 
+Rules:
+- To DELETE code: put the original lines in SEARCH and LEAVE REPLACE EMPTY.
+- To DELETE whole file: SEARCH should contain the entire file; REPLACE empty.
+- If adding at EOF: SEARCH may be empty and REPLACE contains the appended code.
+- If multiple edits needed, output multiple SEARCH/REPLACE blocks in sequence.
+
 CURRENT FILE CONTENT:
-{code_to_modify}
+{file_text}
 """
 
-    raw_output = call_llm(prompt, require_json=False)
-    blocks = parse_search_replace(raw_output) if isinstance(raw_output, str) else []
+    try:
+        raw_output = call_llm(prompt, require_json=False)
+    except Exception as e:
+        log.error(f"LLM call failed in rewrite_function: {e}")
+        raw_output = ""
 
-    # Accept direct content passed by LLM as a payload (some flows do that)
-    # But prefer parse_search_replace (blocks) if present.
-    full_path = Path(state.repo_root) / file_path
-    full_path.parent.mkdir(parents=True, exist_ok=True)
-    if not full_path.exists():
-        full_path.touch()
+    blocks = []
+    if isinstance(raw_output, str) and raw_output.strip():
+        try:
+            blocks = parse_search_replace(raw_output)
+        except Exception as e:
+            log.debug(f"parse_search_replace error: {e}")
+            blocks = []
 
-    file_text = full_path.read_text(encoding="utf-8")
-    original_text = file_text
+    # --- 2) If no blocks from LLM, check for an explicit replacement candidate in state.context_buffer ---
+    # This allows callers (run_agent) to pass a full replacement via state.context_buffer[target_file]
+    candidate = None
+    if not blocks:
+        candidate = state.context_buffer.get(file_path) or state.context_buffer.get(str(file_path))
+        if candidate and not isinstance(candidate, str):
+            candidate = str(candidate)
 
+    # If still nothing to do and file_text unchanged, skip
+    if not blocks and (not candidate or candidate.strip() == file_text.strip()):
+        return {"success": True, "file": file_path, "message": "No changes proposed."}
+
+    # --- 3) Dry-run: apply all blocks or full replacement to preview_text (do not write yet) ---
     preview_text = file_text
-    real_change = False
+    applied_any = False
+    preview_patches = []
 
     if blocks:
-        # Dry-run all blocks
-        for search_block, replace_block in blocks:
-            if search_block.strip() == replace_block.strip():
-                continue
-            # Avoid duplicate append
-            if replace_block.strip() and replace_block.strip() in preview_text:
-                continue
-            if not preview_text.strip():
-                preview_text = replace_block.strip() + "\n"
-                real_change = True
+        for (search_block, replace_block) in blocks:
+            # normalize trailing newlines out from the blocks to avoid double newlines confusion
+            search_block = (search_block or "").rstrip("\n")
+            replace_block = (replace_block or "").rstrip("\n")
+
+            preview_patches.append({"search": search_block, "replace": replace_block})
+
+            # CASE: deletion (SEARCH present, REPLACE empty)
+            if search_block and not replace_block:
+                if search_block in preview_text:
+                    preview_text = preview_text.replace(search_block, "")
+                    applied_any = True
+                    continue
+
+                # fallback: whitespace-normalized search
+                words = search_block.split()
+                if words:
+                    pattern = r'\s+'.join(re.escape(w) for w in words)
+                    m = re.search(pattern, preview_text)
+                    if m:
+                        preview_text = preview_text[:m.start()] + preview_text[m.end():]
+                        applied_any = True
+                        continue
+
+                # not found -> fail dry-run
+                return {"success": False, "error": "Deletion SEARCH block not found during dry-run."}
+
+            # CASE: append to empty file (SEARCH empty)
+            if not preview_text.strip() and replace_block:
+                preview_text = replace_block + ("\n" if not replace_block.endswith("\n") else "")
+                applied_any = True
                 continue
 
+            # Normal patch: try strict apply
             patched = apply_patch(preview_text, search_block, replace_block)
             if patched is None:
-                # whitespace-normalized fallback
-                words = search_block.strip().split()
+                # whitespace-normalized fallback: find loose match of search words
+                words = (search_block or "").split()
                 if words:
                     pattern = r'\s+'.join(re.escape(w) for w in words)
                     m = re.search(pattern, preview_text)
                     if m:
                         patched = preview_text[:m.start()] + replace_block + preview_text[m.end():]
-            if patched and patched != preview_text:
+
+            if patched is None:
+                return {"success": False, "error": "SEARCH block did not match during dry-run."}
+
+            if patched != preview_text:
                 preview_text = patched
-                real_change = True
+                applied_any = True
 
     else:
-        # No search/replace blocks: maybe the LLM or caller provided explicit content in the state/context
-        # We'll accept a "full replacement" provided via state.context_buffer or by returning to caller
-        candidate = state.context_buffer.get(file_path) or state.context_buffer.get(str(file_path))
-        if candidate:
-            candidate_text = candidate if isinstance(candidate, str) else str(candidate)
-            if candidate_text.strip() and candidate_text.strip() != file_text.strip():
-                preview_text = candidate_text
-                real_change = True
+        # Use candidate full replacement
+        candidate_text = candidate or ""
+        if candidate_text.strip() and candidate_text.strip() != preview_text.strip():
+            preview_text = candidate_text
+            preview_patches.append({"search": (file_text[:200] or "").strip(), "replace": (preview_text[:200] or "").strip()})
+            applied_any = True
 
-    # If nothing would change, skip
-    if not real_change:
-        return {"success": True, "file": file_path, "message": "Rewrite skipped — no changes necessary."}
+    # If nothing would change, return success (no-op)
+    if not applied_any:
+        return {"success": True, "file": file_path, "message": "No effective changes after dry-run."}
 
-    # Prepare approval payload for UI — UI expects a simple search/replace preview.
-    if blocks:
-        first_search, first_replace = blocks[0]
-        approval_payload = {"file": file_path, "search": first_search.strip(), "replace": first_replace.strip()}
+    # --- 4) Compose approval payload for UI compatibility ---
+    # Provide both a combined preview AND a single-block preview (first block) to satisfy various UI implementations.
+    if preview_patches:
+        joined_search = "\n\n---\n\n".join(p["search"] for p in preview_patches if p.get("search") is not None)
+        joined_replace = "\n\n---\n\n".join(p["replace"] for p in preview_patches if p.get("replace") is not None)
     else:
-        # full replacement preview: show small excerpt as 'search' (original head) so UI can display context
-        approval_payload = {"file": file_path, "search": (file_text[:200] or "").strip(), "replace": preview_text[:200].strip()}
+        joined_search = (file_text[:200] or "").strip()
+        joined_replace = (preview_text[:200] or "").strip()
 
+    approval_payload = {
+        "file": file_path,
+        "search": joined_search,
+        "replace": joined_replace,
+        "patches": preview_patches  # UI may ignore this, but it's useful for richer clients
+    }
+
+    # Request single approval for the entire change set
     if not ask_user_approval("rewrite_function", approval_payload):
         return {"success": False, "error": "User rejected the code change during preview."}
 
-    # Apply final (we already applied transformations to preview_text in dry-run)
-    # Syntax check before writing
+    # --- 5) Final syntax check and write ---
     if not check_syntax(preview_text, str(file_path)):
-        # restore original immediately (safe)
+        # do not write broken content; preserve original
         full_path.write_text(original_text, encoding="utf-8")
-        return {"success": False, "error": "CRITICAL: SyntaxError detected. Rollback triggered."}
+        return {"success": False, "error": "CRITICAL: SyntaxError detected after applying patches. Rollback to original."}
 
-    full_path.write_text(preview_text, encoding="utf-8")
+    try:
+        full_path.write_text(preview_text, encoding="utf-8")
+    except Exception as e:
+        # Attempt to restore original on unexpected IO error
+        try:
+            full_path.write_text(original_text, encoding="utf-8")
+        except Exception:
+            log.error(f"Failed to restore original after write error: {e}")
+        return {"success": False, "error": f"Failed to write file: {e}"}
+
     return {"success": True, "file": file_path, "message": "Rewrite applied."}
+
 
 # -------------------- Main agent loop ----------------------------------------
 def run_agent(state):
