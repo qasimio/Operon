@@ -491,6 +491,39 @@ def run_agent(state):
         _register_recent_action(state, act, canonical)
         log.debug(f"Normalized payload: {normalized_payload}")
 
+        # ----------------- Redundant read_file short-circuit -----------------
+        # If agent asks to read a file already present in state.context_buffer and
+        # the in-memory copy matches disk, skip the read to avoid repeated reads.
+        if act == "read_file":
+            path = normalized_payload.get("path")
+            if path:
+                try:
+                    in_memory = state.context_buffer.get(path)
+                    # If already loaded and non-empty, compare to disk (if exists)
+                    if in_memory is not None:
+                        disk_path = Path(state.repo_root) / path
+                        try:
+                            disk_text = disk_path.read_text(encoding="utf-8") if disk_path.exists() else ""
+                        except Exception:
+                            disk_text = ""
+                        # If in-memory matches disk (or disk empty but memory present), skip
+                        if (in_memory.strip() and in_memory.strip() == disk_text.strip()) or (in_memory.strip() and not disk_text):
+                            log.info(f"SKIP: redundant read_file for '{path}' (already loaded).")
+                            state.observations.append({"info": f"Skipped redundant read_file: {path}"})
+                            state.action_log.append(f"SKIP read_file {path}")
+                            # Reset loop counters so this doesn't count as a repeat offense
+                            state.loop_counter = 0
+                            # Make last action canonical a noop to avoid repeated detection
+                            state.last_action_canonical = canonicalize_payload({"action": "noop", "path": path})
+                            # account for the step and continue
+                            state.step_count += 1
+                            time.sleep(0.1)
+                            continue
+                except Exception as _e:
+                    # don't allow any error here to kill the loop - just fallthrough to normal read
+                    log.debug(f"redundant-read check failed for {path}: {_e}")
+# ---------------------------------------------------------------------
+
         # short-circuit malformed/noop actions
         if is_noop_action(act or "", normalized_payload):
             log.warning("Received noop or malformed action; skipping.")
