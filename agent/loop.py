@@ -106,112 +106,107 @@ def _detect_function_from_goal(goal, repo_root):
             return w, loc
     return None, None
 
+
 def _rewrite_function(state, code_to_modify, file_path):
-    """
-    Universal, robust rewrite_function:
-    - ask a single approval for all SEARCH/REPLACE blocks
-    - apply deterministic patching with whitespace fallback
-    - syntax-check with universal parser
-    - rollback to original if syntax fails
-    """
     from tools.diff_engine import parse_search_replace, apply_patch
     from agent.approval import ask_user_approval
+    from pathlib import Path
 
-    # keep the original prompt semantics you used
     prompt = f"""You are Operon, an elite surgical code editor.
 GOAL: {state.goal}
 
 CRITICAL CONTEXT:
 You are editing: `{file_path}`
 
-INSTRUCTIONS:
-1. Output a SEARCH block matching the exact original lines.
-2. Output a REPLACE block with the new lines.
-3. CRITICAL RULES:
-   - DO NOT wrap your output in code blocks. Output the raw <<<<<<< SEARCH format directly.
-   - The SEARCH block MUST perfectly match the exact lines in the original file, including indentation.
-   - If adding to the very end of a file, leave the SEARCH block COMPLETELY EMPTY.
+Output ONLY raw SEARCH/REPLACE blocks.
 
-FORMAT REQUIREMENT:
+FORMAT:
 <<<<<<< SEARCH
-[Exact lines from the original file you want to replace]
+original
 =======
-[The new modified lines]
+new
 >>>>>>> REPLACE
 
-Here is the current code for `{file_path}`:
+CURRENT CODE:
 {code_to_modify}
-Now, output the raw SEARCH/REPLACE block to achieve the goal."""
+"""
 
-    log.debug(f"LLM Prompt for rewrite:\n{prompt}")
     raw_output = call_llm(prompt, require_json=False)
-
     blocks = parse_search_replace(raw_output)
+
     if not blocks:
-        return {"success": False, "error": "LLM failed to output valid SEARCH/REPLACE blocks."}
+        return {"success": False, "error": "No valid SEARCH/REPLACE blocks returned."}
 
     full_path = Path(state.repo_root) / file_path
-
-    # Ensure file exists so we can read and write properly
+    full_path.parent.mkdir(parents=True, exist_ok=True)
     if not full_path.exists():
-        full_path.parent.mkdir(parents=True, exist_ok=True)
         full_path.touch()
 
     file_text = full_path.read_text(encoding="utf-8")
-    original_file_text = file_text
+    original_text = file_text
 
-    # --- ASK FOR UI APPROVAL ONCE (all blocks together) ---
-    # Build preview payload containing all patches for a single approval UI
-    preview_patches = []
-    for s, r in blocks:
-        preview_patches.append({"search": s.strip(), "replace": r.strip()})
+    # ---------- DRY RUN FIRST ----------
+    preview_text = file_text
+    real_change = False
 
-    approval_payload = {"file": file_path, "patches": preview_patches}
-    if not ask_user_approval("rewrite_function", approval_payload):
-        return {"success": False, "error": "User rejected the code change during preview."}
-
-    applied_count = 0
     for search_block, replace_block in blocks:
-        # skip no-op replacements
+
+        # Skip identical replacement
         if search_block.strip() == replace_block.strip():
             continue
 
-        # If the file is empty, just append/replace with new content
-        if not file_text.strip():
-            patched_text = replace_block.strip() + "\n"
-        else:
-            patched_text = apply_patch(file_text, search_block, replace_block)
+        # Prevent duplicate append disasters
+        if replace_block.strip() in preview_text:
+            continue
 
-            # Fallback: whitespace-normalized matching if strict failed
-            if patched_text is None:
-                log.warning("Strict match failed. Attempting whitespace-normalized matching...")
-                words = search_block.strip().split()
-                if words:
-                    pattern = r'\s+'.join(re.escape(w) for w in words)
-                    m = re.search(pattern, file_text)
-                    if m:
-                        patched_text = file_text[:m.start()] + replace_block + file_text[m.end():]
+        if not preview_text.strip():
+            preview_text = replace_block.strip() + "\n"
+            real_change = True
+            continue
 
-        if patched_text is None:
-            # Keep original file on failure (we haven't overwritten it yet)
-            return {"success": False, "error": "SEARCH block did not exactly match the file content."}
+        patched = apply_patch(preview_text, search_block, replace_block)
 
-        file_text = patched_text
-        applied_count += 1
+        if patched is None:
+            # whitespace fallback
+            words = search_block.strip().split()
+            if words:
+                pattern = r'\s+'.join(re.escape(w) for w in words)
+                m = re.search(pattern, preview_text)
+                if m:
+                    patched = preview_text[:m.start()] + replace_block + preview_text[m.end():]
 
-    # Syntax sentinel — use string path for parser
+        if patched and patched != preview_text:
+            preview_text = patched
+            real_change = True
+
+    # ---------- SKIP NOOP ----------
+    if not real_change:
+        return {"success": True, "file": file_path, "message": "Rewrite skipped (already correct)."}
+
+    # ---------- APPROVAL ----------
+    # IMPORTANT: UI expects search/replace NOT patches list
+    first_search, first_replace = blocks[0]
+
+    approval_payload = {
+        "file": file_path,
+        "search": first_search.strip(),
+        "replace": first_replace.strip()
+    }
+
+    if not ask_user_approval("rewrite_function", approval_payload):
+        return {"success": False, "error": "User rejected preview."}
+
+    # ---------- APPLY FOR REAL ----------
+    file_text = preview_text
+
+    # ---------- SYNTAX CHECK ----------
     if not check_syntax(file_text, str(file_path)):
-        error_msg = f"CRITICAL: SyntaxError detected in {file_path}! You broke the code structure. Rollback triggered."
-        log.error(f"Syntax check failed for {file_path}.")
-        # Restore the file instantly without messing with Git
-        full_path.write_text(original_file_text, encoding="utf-8")
-        return {"success": False, "error": error_msg}
-
-    if applied_count == 0:
-         return {"success": False, "error": "No valid changes were generated."}
+        full_path.write_text(original_text, encoding="utf-8")
+        return {"success": False, "error": "Syntax error detected. Rollback triggered."}
 
     full_path.write_text(file_text, encoding="utf-8")
-    return {"success": True, "file": file_path, "message": f"Applied {applied_count} patch(es). Syntax valid."}
+
+    return {"success": True, "file": file_path, "message": "Rewrite applied."}
 
 # -------------------- Main agent loop ----------------------------------------
 def run_agent(state):
@@ -326,6 +321,7 @@ def run_agent(state):
                 state.action_log.append(f"👨‍⚖️ REVIEWER approved step {state.current_step + 1}.")
                 state.current_step += 1
                 if state.current_step >= len(state.plan):
+                    state.phase = "REVIEWER"
                     log.info("[bold green]✅ All steps complete! REVIEWER should finish next.[/bold green]")
                     state.observations.append({"system": "All steps complete. You must use the 'finish' tool."})
                 else:
@@ -456,6 +452,13 @@ def run_agent(state):
                         state.files_modified.append(file_path)
 
             elif act == "rewrite_function":
+                # PREVENT USELESS REWRITE
+                if target_file in state.context_buffer:
+                    cached = state.context_buffer[target_file].strip()
+                    if cached == code_to_modify.strip():
+                        state.observations.append({"system": f"{target_file} already matches cached content. Skipping rewrite."})
+                        state.phase = "REVIEWER"
+                        continue
                 target_file = normalized_payload.get("file")
                 if not target_file:
                     state.observations.append({"error": "rewrite_function requires a 'file' parameter."})

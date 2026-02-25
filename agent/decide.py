@@ -76,7 +76,7 @@ REQUIREMENT: Output STRICT JSON. Do NOT wrap in markdown blocks.
     log.debug(f"Calling LLM for {phase}...")
     raw_output = call_llm(prompt, require_json=True)
     
-    clean_json = re.sub(r"(?:json)?\n?(.*?)\n?``", r"\1", raw_output, flags=re.DOTALL).strip()
+    clean_json = re.sub(r"```(?:json)?\s*(.*?)\s*```", r"\1", raw_output, flags=re.DOTALL).strip()
     try:
         data = json.loads(clean_json)
         # normalize: if user returned a top-level "action" object, wrap it under "tool"
