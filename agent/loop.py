@@ -71,6 +71,43 @@ def normalize_action_payload(act: str, payload: dict) -> dict:
 
     return p
 
+def resolve_repo_path(repo_root, user_path: str):
+    """
+    Resolve a possibly-short filename to a real repo path.
+
+    Priority:
+    1) exact relative path exists
+    2) recursive filename match anywhere in repo
+    3) return original (caller may create it)
+    """
+    root = Path(repo_root)
+
+    if not user_path:
+        return user_path
+
+    # 1. exact relative path
+    candidate = root / user_path
+    if candidate.exists():
+        return user_path
+
+    # 2. recursive filename search
+    name = Path(user_path).name.lower()
+    matches = []
+
+    for p in root.rglob("*"):
+        if ".git" in p.parts:
+            continue
+        if p.is_file() and p.name.lower() == name:
+            matches.append(p)
+
+    if matches:
+        # choose shortest relative path (closest to root)
+        best = sorted(matches, key=lambda x: len(str(x.relative_to(root))))[0]
+        return str(best.relative_to(root))
+
+    # 3. fallback → allow creation
+    return user_path
+
 def is_noop_action(act: str, payload: dict) -> bool:
     if not act or act.lower() in {"noop", "error", "none"}:
         return True
@@ -383,6 +420,8 @@ def run_agent(state):
                     state.action_log.append("FAILED: create_file missing 'file_path' parameter.")
                     continue
 
+                file_path = resolve_repo_path(state.repo_root, file_path)
+
                 # Approval before writing
                 preview = {"file": file_path, "search": "", "replace": content}
                 if not ask_user_approval("create_file", preview):
@@ -440,6 +479,8 @@ def run_agent(state):
                     state.observations.append({"error": "rewrite_function requires a 'file' parameter."})
                     state.action_log.append("FAILED: rewrite_function missing 'file' parameter.")
                     continue
+
+                target_file = resolve_repo_path(state.repo_root, target_file)
 
                 full_path = Path(state.repo_root) / target_file
                 if not full_path.exists():
