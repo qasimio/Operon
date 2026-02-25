@@ -1,4 +1,4 @@
-# agent/loop.py  (cleaned, drop-in)
+# agent/loop.py (cleaned, drop-in)
 from tools.fs_tools import read_file
 from tools.git_safety import setup_git_env, rollback_macro, commit_success
 from tools.repo_search import search_repo
@@ -18,13 +18,13 @@ MAX_STEPS = 25
 
 # --- Helpers -----------------------------------------------------------------
 def _ensure_state_fields(state):
-    # Minimal, safe defaults so the rest of the loop can assume these exist
     if not hasattr(state, "action_log"): state.action_log = []
     if not hasattr(state, "observations"): state.observations = []
     if not hasattr(state, "context_buffer"): state.context_buffer = {}
     if not hasattr(state, "current_step"): state.current_step = 0
     if not hasattr(state, "loop_counter"): state.loop_counter = 0
     if not hasattr(state, "last_action_payload"): state.last_action_payload = None
+    if not hasattr(state, "last_action_canonical"): state.last_action_canonical = None
     if not hasattr(state, "step_count"): state.step_count = 0
     if not hasattr(state, "files_read"): state.files_read = []
     if not hasattr(state, "files_modified"): state.files_modified = []
@@ -32,66 +32,51 @@ def _ensure_state_fields(state):
     if not hasattr(state, "phase"): state.phase = "CODER"
 
 def canonicalize_payload(payload: dict) -> str:
-    """
-    Convert payload to a canonical JSON string (sorted keys) for reliable
-    loop-detection comparisons.
-    """
     try:
         return json.dumps(payload, sort_keys=True, default=str)
     except Exception:
-        # fallback: simple string repr
         return str(sorted(payload.items()))
 
 def normalize_action_payload(act: str, payload: dict) -> dict:
-    """
-    Accept sloppy LLM output and normalize common alias keys so our tool
-    validator doesn't choke on synonyms.
-    Examples:
-      - create_file may yield 'file' or 'path' => map to 'file_path'
-      - rewrite_function may yield 'file_path' => map to 'file'
-      - read_file may yield 'file_path' => map to 'path'
-    This function mutates and returns a new dict.
-    """
     p = dict(payload) if isinstance(payload, dict) else {}
-    # common aliases
+    # Normalize aliases
     if "file" in p and "file_path" not in p:
         p["file_path"] = p["file"]
     if "file_path" in p and "file" not in p:
         p["file"] = p["file_path"]
-
     if "path" in p and "file_path" not in p:
         p["file_path"] = p["path"]
     if "file_path" in p and "path" not in p:
         p["path"] = p["file_path"]
 
-    if "text" in p and "text" not in p:
-        p["text"] = p.get("text")
+    # content synonyms
+    for k in ("new_content", "content", "function_content", "initial_content"):
+        if k in p and "initial_content" not in p:
+            p["initial_content"] = p.get(k)
 
-    # specific: rewrite_function expects 'file' in your tool_jail
+    # rewrite_function expects 'file' key
     if act == "rewrite_function" and "file_path" in p and "file" not in p:
         p["file"] = p["file_path"]
 
-    # create_file should accept missing initial_content
-    if act == "create_file" and "initial_content" not in p:
-        p["initial_content"] = ""
-
-    # read_file: prefer 'path'
+    # read_file expects 'path'
     if act == "read_file":
         if "file" in p and "path" not in p:
             p["path"] = p["file"]
         if "file_path" in p and "path" not in p:
             p["path"] = p["file_path"]
 
+    # create_file default
+    if act == "create_file" and "initial_content" not in p:
+        p["initial_content"] = ""
+
     return p
 
 def is_noop_action(act: str, payload: dict) -> bool:
-    """Return True for no-op or malformed actions we should skip safely."""
-    if not act or act in {"noop", "error", "none"}:
+    if not act or act.lower() in {"noop", "error", "none"}:
         return True
-    # If action is create_file but no filename supplied, treat as noop
     if act == "create_file" and not payload.get("file_path"):
         return True
-    if act == "rewrite_function" and not payload.get("file"):
+    if act == "rewrite_function" and not payload.get("file") and not payload.get("initial_content"):
         return True
     return False
 
@@ -106,8 +91,15 @@ def _detect_function_from_goal(goal, repo_root):
             return w, loc
     return None, None
 
-
 def _rewrite_function(state, code_to_modify, file_path):
+    """
+    Robust rewrite:
+    - Accepts SEARCH/REPLACE blocks (preferred)
+    - Or accepts full replacement content in 'initial_content' (fallback)
+    - Dry-run changes first; skip if noop
+    - Ask user approval only for the first meaningful change (UI compatibility)
+    - Apply changes, syntax-check, write, and return result
+    """
     from tools.diff_engine import parse_search_replace, apply_patch
     from agent.approval import ask_user_approval
     from pathlib import Path
@@ -118,8 +110,7 @@ GOAL: {state.goal}
 CRITICAL CONTEXT:
 You are editing: `{file_path}`
 
-Output ONLY raw SEARCH/REPLACE blocks.
-
+INSTRUCTIONS: Output raw SEARCH/REPLACE blocks or provide the replacement content.
 FORMAT:
 <<<<<<< SEARCH
 original
@@ -127,16 +118,15 @@ original
 new
 >>>>>>> REPLACE
 
-CURRENT CODE:
+CURRENT FILE CONTENT:
 {code_to_modify}
 """
 
     raw_output = call_llm(prompt, require_json=False)
-    blocks = parse_search_replace(raw_output)
+    blocks = parse_search_replace(raw_output) if isinstance(raw_output, str) else []
 
-    if not blocks:
-        return {"success": False, "error": "No valid SEARCH/REPLACE blocks returned."}
-
+    # Accept direct content passed by LLM as a payload (some flows do that)
+    # But prefer parse_search_replace (blocks) if present.
     full_path = Path(state.repo_root) / file_path
     full_path.parent.mkdir(parents=True, exist_ok=True)
     if not full_path.exists():
@@ -145,80 +135,80 @@ CURRENT CODE:
     file_text = full_path.read_text(encoding="utf-8")
     original_text = file_text
 
-    # ---------- DRY RUN FIRST ----------
     preview_text = file_text
     real_change = False
 
-    for search_block, replace_block in blocks:
+    if blocks:
+        # Dry-run all blocks
+        for search_block, replace_block in blocks:
+            if search_block.strip() == replace_block.strip():
+                continue
+            # Avoid duplicate append
+            if replace_block.strip() and replace_block.strip() in preview_text:
+                continue
+            if not preview_text.strip():
+                preview_text = replace_block.strip() + "\n"
+                real_change = True
+                continue
 
-        # Skip identical replacement
-        if search_block.strip() == replace_block.strip():
-            continue
+            patched = apply_patch(preview_text, search_block, replace_block)
+            if patched is None:
+                # whitespace-normalized fallback
+                words = search_block.strip().split()
+                if words:
+                    pattern = r'\s+'.join(re.escape(w) for w in words)
+                    m = re.search(pattern, preview_text)
+                    if m:
+                        patched = preview_text[:m.start()] + replace_block + preview_text[m.end():]
+            if patched and patched != preview_text:
+                preview_text = patched
+                real_change = True
 
-        # Prevent duplicate append disasters
-        if replace_block.strip() in preview_text:
-            continue
+    else:
+        # No search/replace blocks: maybe the LLM or caller provided explicit content in the state/context
+        # We'll accept a "full replacement" provided via state.context_buffer or by returning to caller
+        candidate = state.context_buffer.get(file_path) or state.context_buffer.get(str(file_path))
+        if candidate:
+            candidate_text = candidate if isinstance(candidate, str) else str(candidate)
+            if candidate_text.strip() and candidate_text.strip() != file_text.strip():
+                preview_text = candidate_text
+                real_change = True
 
-        if not preview_text.strip():
-            preview_text = replace_block.strip() + "\n"
-            real_change = True
-            continue
-
-        patched = apply_patch(preview_text, search_block, replace_block)
-
-        if patched is None:
-            # whitespace fallback
-            words = search_block.strip().split()
-            if words:
-                pattern = r'\s+'.join(re.escape(w) for w in words)
-                m = re.search(pattern, preview_text)
-                if m:
-                    patched = preview_text[:m.start()] + replace_block + preview_text[m.end():]
-
-        if patched and patched != preview_text:
-            preview_text = patched
-            real_change = True
-
-    # ---------- SKIP NOOP ----------
+    # If nothing would change, skip
     if not real_change:
-        return {"success": True, "file": file_path, "message": "Rewrite skipped (already correct)."}
+        return {"success": True, "file": file_path, "message": "Rewrite skipped — no changes necessary."}
 
-    # ---------- APPROVAL ----------
-    # IMPORTANT: UI expects search/replace NOT patches list
-    first_search, first_replace = blocks[0]
-
-    approval_payload = {
-        "file": file_path,
-        "search": first_search.strip(),
-        "replace": first_replace.strip()
-    }
+    # Prepare approval payload for UI — UI expects a simple search/replace preview.
+    if blocks:
+        first_search, first_replace = blocks[0]
+        approval_payload = {"file": file_path, "search": first_search.strip(), "replace": first_replace.strip()}
+    else:
+        # full replacement preview: show small excerpt as 'search' (original head) so UI can display context
+        approval_payload = {"file": file_path, "search": (file_text[:200] or "").strip(), "replace": preview_text[:200].strip()}
 
     if not ask_user_approval("rewrite_function", approval_payload):
-        return {"success": False, "error": "User rejected preview."}
+        return {"success": False, "error": "User rejected the code change during preview."}
 
-    # ---------- APPLY FOR REAL ----------
-    file_text = preview_text
-
-    # ---------- SYNTAX CHECK ----------
-    if not check_syntax(file_text, str(file_path)):
+    # Apply final (we already applied transformations to preview_text in dry-run)
+    # Syntax check before writing
+    if not check_syntax(preview_text, str(file_path)):
+        # restore original immediately (safe)
         full_path.write_text(original_text, encoding="utf-8")
-        return {"success": False, "error": "Syntax error detected. Rollback triggered."}
+        return {"success": False, "error": "CRITICAL: SyntaxError detected. Rollback triggered."}
 
-    full_path.write_text(file_text, encoding="utf-8")
-
+    full_path.write_text(preview_text, encoding="utf-8")
     return {"success": True, "file": file_path, "message": "Rewrite applied."}
 
 # -------------------- Main agent loop ----------------------------------------
 def run_agent(state):
     from agent.tool_jail import validate_tool
-    from agent.approval import ask_user_approval  # used in create_file fallback
+    from agent.approval import ask_user_approval  # used for file create previews
     _ensure_state_fields(state)
 
-    # ================= ARCHITECT PHASE =================
+    # ARCHITECT PHASE
     if not getattr(state, "plan", None):
         state.phase = "ARCHITECT"
         state.git_state = setup_git_env(state.repo_root)
-        # allow planner to return (plan, is_question) or just plan
         try:
             plan_tuple = make_plan(state.goal, state.repo_root)
             if isinstance(plan_tuple, (list, tuple)):
@@ -227,7 +217,7 @@ def run_agent(state):
             else:
                 state.plan = plan_tuple
                 state.is_question = False
-        except Exception as e:
+        except Exception:
             log.error("Planner failed, falling back to single-step plan.")
             state.plan = [state.goal]
             state.is_question = False
@@ -237,38 +227,29 @@ def run_agent(state):
     state.phase = "CODER"
 
     while not getattr(state, "done", False):
-        # Macro rollback safety
         if state.step_count >= MAX_STEPS:
             log.error(f"Hit max steps({MAX_STEPS}). Operon failed to complete the task.")
             rollback_macro(state.repo_root, getattr(state, "git_state", {}))
             break
 
-        # --- DECIDE / NORMALIZE ---
         decision = decide_next_action(state) or {}
-        # Back-compat: if decide_next_action returned a "prompt" (old behavior), call LLM directly
+        # Back-compat: if decide returned a "prompt" string (older behavior), call LLM
         if "prompt" in decision and isinstance(decision["prompt"], str):
             try:
                 raw = call_llm(decision["prompt"], require_json=False)
-                # try to parse JSON out of response, but be defensive
-                clean = re.sub(r"```(?:json)?\n?(.*?)\n?```", r"\1", raw, flags=re.DOTALL).strip()
-                try:
-                    decision = json.loads(clean)
-                except Exception:
-                    # expect {"thought": "...", "tool": {...}}
-                    decision = {"thought": "LLM returned non-JSON", "tool": {"action": "error"}}
+                clean = re.sub(r"```(?:json)?\s*(.*?)\s*```", r"\1", raw, flags=re.DOTALL).strip()
+                decision = json.loads(clean)
             except Exception:
-                decision = {"thought": "LLM call failed", "tool": {"action": "error"}}
+                decision = {"thought": "LLM returned non-JSON", "tool": {"action": "error"}}
 
         thought = decision.get("thought", "Thinking...")
         action_payload = decision.get("tool", decision) or {}
         if isinstance(action_payload, dict) and "action" not in action_payload and "tool" in action_payload:
             action_payload = action_payload["tool"]
 
-        # Normalize action payload keys for robustness
         act = action_payload.get("action") if isinstance(action_payload, dict) else None
         normalized_payload = normalize_action_payload(act or "", action_payload if isinstance(action_payload, dict) else {})
 
-        # Guard against no-op or malformed actions
         if is_noop_action(act or "", normalized_payload):
             log.warning("Received noop or malformed action; skipping.")
             state.observations.append({"error": "No valid action supplied by LLM."})
@@ -276,7 +257,6 @@ def run_agent(state):
             time.sleep(0.5)
             continue
 
-        # --- 1. STRICT TOOL VALIDATION ---
         is_valid, val_msg = validate_tool(act, normalized_payload, state.phase)
         if not is_valid:
             log.warning(f"Jail intercepted: {val_msg}")
@@ -285,7 +265,7 @@ def run_agent(state):
             time.sleep(1)
             continue
 
-        # --- 2. THE LOOP BREAKER (use canonicalized payload for equality)
+        # Loop detection using canonical payload
         canonical = canonicalize_payload({"action": act, **normalized_payload})
         if getattr(state, "last_action_canonical", None) == canonical:
             state.loop_counter += 1
@@ -315,13 +295,11 @@ def run_agent(state):
         log.info(f"⚙️ EXECUTING: {act}")
         log.debug(f"Normalized payload: {normalized_payload}")
 
-        # ------------------ ROUTING & EXECUTION -----------------------
         try:
             if act == "approve_step":
                 state.action_log.append(f"👨‍⚖️ REVIEWER approved step {state.current_step + 1}.")
                 state.current_step += 1
                 if state.current_step >= len(state.plan):
-                    state.phase = "REVIEWER"
                     log.info("[bold green]✅ All steps complete! REVIEWER should finish next.[/bold green]")
                     state.observations.append({"system": "All steps complete. You must use the 'finish' tool."})
                 else:
@@ -400,33 +378,33 @@ def run_agent(state):
                 file_path = normalized_payload.get("file_path")
                 content = normalized_payload.get("initial_content", "")
 
-                # Preview payload structure matches rewrite UI but is a single-create action
-                preview = {"file": file_path, "search": "", "replace": content}
-                if not ask_user_approval("create_file", preview):
-                    state.observations.append({"error": "User rejected file creation."})
-                    state.action_log.append(f"FAILED: User rejected creating {file_path}")
-                    time.sleep(0.2)
-                    continue
-
                 if not file_path:
                     state.observations.append({"error": "create_file requires a 'file_path' parameter."})
                     state.action_log.append("FAILED: create_file missing 'file_path' parameter.")
                     continue
 
+                # Approval before writing
+                preview = {"file": file_path, "search": "", "replace": content}
+                if not ask_user_approval("create_file", preview):
+                    state.observations.append({"error": "User rejected file creation."})
+                    state.action_log.append(f"FAILED: User rejected creating {file_path}")
+                    continue
+
                 full_path = Path(state.repo_root) / file_path
+
                 if full_path.exists():
-                    # If content is identical, consider it success and hand off to reviewer
                     existing = full_path.read_text(encoding="utf-8")
                     if existing.strip() == content.strip():
                         state.observations.append({"success": f"File {file_path} already exists with identical content."})
                         state.action_log.append(f"Skipped create_file: already exists and matches {file_path}")
-                        # Auto-handoff so the reviewer can approve without the coder looping
-                        state.phase = "REVIEWER"
-                        state.context_buffer = {file_path: existing}
-                        state.observations.append({
-                            "system": f"Coder reports file {file_path} already matches requested content. REVIEWER: please verify.",
-                            "file_preview": existing[:2000]
-                        })
+                        # If content is empty, remain CODER (so agent can write); otherwise hand off to REVIEWER
+                        if content.strip():
+                            state.phase = "REVIEWER"
+                            state.context_buffer = {file_path: existing}
+                            state.observations.append({
+                                "system": f"Coder reports file {file_path} already matches requested content. REVIEWER: please verify.",
+                                "file_preview": existing[:2000]
+                            })
                         continue
                     else:
                         state.observations.append({"error": f"File {file_path} already exists and differs."})
@@ -439,41 +417,59 @@ def run_agent(state):
                     state.observations.append({"success": f"File {file_path} created successfully."})
                     log.info(f"📄 Created new file: {file_path}")
 
-                    # --- AUTO HANDOFF TO REVIEWER (same logic as rewrite_function) ---
-                    log.info("[bold cyan]🔄 Auto-Handing off to REVIEWER after file creation...[/bold cyan]")
-                    state.phase = "REVIEWER"
-                    updated_code = full_path.read_text(encoding="utf-8")
-                    state.context_buffer = {file_path: updated_code}
-                    state.observations.append({
-                        "system": f"Coder successfully created {file_path}. REVIEWER MUST verify the goal was met.",
-                        "file_preview": updated_code[:2000]
-                    })
-                    if file_path not in state.files_modified:
-                        state.files_modified.append(file_path)
+                    # If content non-empty, hand off to reviewer; else keep coder to write contents
+                    if content.strip():
+                        log.info("[bold cyan]🔄 Auto-Handing off to REVIEWER after file creation...[/bold cyan]")
+                        state.phase = "REVIEWER"
+                        updated_code = full_path.read_text(encoding="utf-8")
+                        state.context_buffer = {file_path: updated_code}
+                        state.observations.append({
+                            "system": f"Coder successfully created {file_path}. REVIEWER MUST verify the goal was met.",
+                            "file_preview": updated_code[:2000]
+                        })
+                        if file_path not in state.files_modified:
+                            state.files_modified.append(file_path)
+                    else:
+                        # empty file created intentionally — let CODER fill it
+                        state.observations.append({"system": f"Empty file {file_path} created; CODER must write content."})
 
             elif act == "rewrite_function":
-                # PREVENT USELESS REWRITE
-                if target_file in state.context_buffer:
-                    cached = state.context_buffer[target_file].strip()
-                    if cached == code_to_modify.strip():
-                        state.observations.append({"system": f"{target_file} already matches cached content. Skipping rewrite."})
-                        state.phase = "REVIEWER"
-                        continue
+                # define target_file here (avoid UnboundLocalError)
                 target_file = normalized_payload.get("file")
                 if not target_file:
                     state.observations.append({"error": "rewrite_function requires a 'file' parameter."})
                     state.action_log.append("FAILED: rewrite_function missing 'file' parameter.")
                     continue
+
                 full_path = Path(state.repo_root) / target_file
                 if not full_path.exists():
+                    # create an empty file to be modified
+                    full_path.parent.mkdir(parents=True, exist_ok=True)
                     full_path.touch()
+
                 code_to_modify = full_path.read_text(encoding="utf-8")
+
+                # PREVENT useless rewrite if cached context matches file
+                cached = state.context_buffer.get(target_file) or state.context_buffer.get(str(target_file))
+                if cached and isinstance(cached, str) and cached.strip() == code_to_modify.strip():
+                    state.observations.append({"system": f"{target_file} already matches cached content. Skipping rewrite."})
+                    # Hand off to reviewer to acknowledge
+                    state.phase = "REVIEWER"
+                    state.context_buffer = {target_file: cached}
+                    continue
+
+                # if caller provided content in payload (some model outputs): accept it as replacement candidate
+                # normalized_payload may include `initial_content` with intended file content
+                initial_content = normalized_payload.get("initial_content")
+                if initial_content:
+                    # put replacement candidate into context_buffer so _rewrite_function can pick it up if needed
+                    state.context_buffer[target_file] = initial_content
+
                 obs = _rewrite_function(state, code_to_modify, target_file)
 
                 if obs.get("success"):
                     log.info(f"Successfully patched {target_file}")
                     state.action_log.append(f"SUCCESS: Applied code patch to '{target_file}'.")
-                    # --- THE AUTO-HANDOFF ---
                     log.info("[bold cyan]🔄 Auto-Handing off to REVIEWER...[/bold cyan]")
                     state.phase = "REVIEWER"
                     updated_code = full_path.read_text(encoding="utf-8")
@@ -484,7 +480,6 @@ def run_agent(state):
                     })
                     if target_file not in state.files_modified:
                         state.files_modified.append(target_file)
-
                 else:
                     err = obs.get("error") or ""
                     log.error(f"Patch failed: {err}")
@@ -494,16 +489,13 @@ def run_agent(state):
                     state.observations.append({"error": err})
 
             else:
-                # Unknown but validated actions should not reach here; defensive catch
                 log.warning(f"Unhandled action reached execution: {act}")
                 state.observations.append({"error": f"Unhandled action: {act}"})
 
         except Exception as exc:
-            # Never let an unexpected exception silently kill the loop
             state.observations.append({"error": f"Unhandled exception during '{act}': {exc}"})
             log.exception("Unhandled exception in run_agent loop.")
 
-        # short sleep to avoid hot-looping
         time.sleep(0.2)
 
     return state
