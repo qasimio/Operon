@@ -6,7 +6,8 @@ CODER_TOOLS = {
     "read_file": ["path"],
     "rewrite_function": ["file"],
     "create_file": ["file_path", "initial_content"],
-    "find_file": ["search_term"]
+    "find_file": ["search_term"],
+    "delete_file": ["file_path"]
 }
 
 REVIEWER_TOOLS = {

@@ -106,6 +106,8 @@ def resolve_repo_path(repo_root, user_path: str):
         return str(best.relative_to(root))
 
     # 3. fallback → allow creation
+    resolved = user_path
+    log.debug(f"Resolved '{user_path}' → '{resolved}'")
     return user_path
 
 def is_noop_action(act: str, payload: dict) -> bool:
@@ -147,7 +149,18 @@ GOAL: {state.goal}
 CRITICAL CONTEXT:
 You are editing: `{file_path}`
 
-INSTRUCTIONS: Output raw SEARCH/REPLACE blocks or provide the replacement content.
+INSTRUCTIONS: 
+1. Output SEARCH block matching exact original lines.
+2. Output REPLACE block with new lines.
+IMPORTANT PATCH RULES:
+
+• To DELETE code → REPLACE must be COMPLETELY EMPTY  
+• To DELETE whole file → SEARCH must contain the entire file and REPLACE must be EMPTY  
+• To DELETE specific lines → SEARCH must contain ONLY those lines and REPLACE EMPTY  
+• NEVER explain anything outside SEARCH/REPLACE blocks  
+
+If multiple deletions required → output MULTIPLE SEARCH/REPLACE blocks.
+
 FORMAT:
 <<<<<<< SEARCH
 original
