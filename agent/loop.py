@@ -1,4 +1,5 @@
 # agent/loop.py (cleaned, drop-in)
+from runtime import state
 from tools.fs_tools import read_file
 from tools.git_safety import setup_git_env, rollback_macro, commit_success
 from tools.repo_search import search_repo
@@ -499,7 +500,7 @@ def run_agent(state):
             continue
 
         # strict tool validation
-        is_valid, val_msg = validate_tool(act, normalized_payload, state.phase)
+        is_valid, val_msg = validate_tool(act, normalized_payload, state.phase, state)
         if not is_valid:
             log.warning(f"Jail intercepted: {val_msg}")
             state.observations.append({"error": f"SYSTEM OVERRIDE: {val_msg}"})

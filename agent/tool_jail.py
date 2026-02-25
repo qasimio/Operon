@@ -18,16 +18,40 @@ REVIEWER_TOOLS = {
 
 ALLOWED_ACTIONS = {**CODER_TOOLS, **REVIEWER_TOOLS}
 
-def validate_tool(act, payload, phase):
-    if phase == "CODER" and act not in CODER_TOOLS:
-        return False, f"CODER cannot use '{act}'. Allowed: {list(CODER_TOOLS.keys())}"
-    
-    if phase == "REVIEWER" and act not in REVIEWER_TOOLS:
-        return False, f"REVIEWER cannot use '{act}'. Allowed: {list(REVIEWER_TOOLS.keys())}"
-    
-    required_keys = ALLOWED_ACTIONS.get(act, [])
-    for key in required_keys:
-        if key not in payload:
-            return False, f"Tool '{act}' is missing required parameter '{key}'."
-            
-    return True, "Valid"
+# agent/tool_jail.py - validate_tool enhancement
+def validate_tool(action, payload, phase, state=None):
+    """
+    Return (is_valid: bool, message: str).
+    If `state` provided, we can enforce throttles and additional sanity checks.
+    """
+    allowed_by_phase = {
+        "CODER": {"exact_search", "semantic_search", "find_file", "read_file", "rewrite_function", "create_file"},
+        "REVIEWER": {"approve_step", "reject_step", "finish"}
+    }
+    if phase not in allowed_by_phase:
+        return False, f"Unknown phase: {phase}"
+
+    if action not in allowed_by_phase[phase]:
+        return False, f"{phase} cannot use '{action}'. Allowed: {allowed_by_phase[phase]}"
+
+    # basic required-param checks
+    if action == "read_file":
+        if not payload.get("path"):
+            return False, "read_file requires 'path'."
+    if action == "rewrite_function":
+        if not payload.get("file") and not payload.get("initial_content"):
+            return False, "rewrite_function requires 'file' or 'initial_content'."
+    if action == "create_file":
+        if not payload.get("file_path"):
+            return False, "create_file requires 'file_path'."
+
+    # optional: throttle enforcement if state provided
+    if state and action in {"semantic_search", "exact_search", "find_file"}:
+        key = payload.get("query") or payload.get("text") or payload.get("search_term") or ""
+        if key:
+            sc = getattr(state, "search_counts", {}).get(key, {"count": 0})
+            if sc.get("count", 0) > 6:
+                return False, f"Query '{key}' throttled due to repeated attempts ({sc.get('count')})."
+
+    # allowed
+    return True, "ok"
