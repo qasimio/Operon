@@ -1,82 +1,335 @@
-# 🧬 Operon
+### 0. EXECUTIVE SYSTEM IDENTITY
 
-> Operon is a local-first autonomous coding agent that surgically modifies repository functions using deterministic loop control, slice-based rewriting, and human-approved commits.
-
-Operon is not a chatbot, a script runner, or a blind patch generator. It is designed to act as a deterministic, controllable, and auditable autonomous software engineer living directly inside your terminal.
-
----
-
-## ⚡ Core Philosophy
-
-Operon is built strictly around five non-negotiable principles:
-
-1. **Local-First:** Runs entirely on your machine. No API dependencies, zero privacy leaks, full control over your repository.
-2. **Surgical Edits Only:** Operon will never blindly rewrite entire files. It detects functions, extracts code slices, modifies them, and patches the exact slice back into the file.
-3. **Deterministic Execution Loop:** The LLM is the brain, but Operon's engine is the surgeon. The loop engine controls reality; the LLM only suggests actions.
-4. **Human Approval Gates:** Destructive actions (rewriting functions, running shell commands, committing code) require explicit user approval (`y/n`) alongside interactive syntax diff previews to prevent repo-nuking.
-5. **Tool-Based Architecture:** The LLM never touches the filesystem directly. Everything routes through explicit, sandboxed tools (`read_file`, `rewrite_function`, `search_repo`).
+**Project name:** Operon
+**Core purpose:** Autonomous AI Software Engineer capable of navigating local repositories, reasoning about code, performing surgical file edits, verifying its own work, and committing changes.
+**Domain/business context:** AI Developer Tools / Local Autonomous Agents. Operates directly within user codebases to accelerate development, fix bugs, and scaffold features.
+**System type:** TUI (Text User Interface) driven local CLI agent.
+**Maturity level:** Advanced Prototype / Alpha (Core loop stable, semantic memory functional, multi-agent handoffs working, currently expanding LLM provider routing via LiteLLM).
 
 ---
 
-## 🏗️ Architecture & Pipeline
+### 1. HIGH-LEVEL ARCHITECTURE
 
-Operon utilizes a ReAct (Reasoning + Acting) loop combined with a surgical code parser. 
+#### 1.1 Architectural style
 
-```mermaid
-graph TD
-    A[User Goal] --> B(Planner)
-    B --> C{Loop Engine}
-    C --> D[Repo Search]
-    C --> E[Function Locator]
-    E --> F[Code Slice Loader]
-    F --> G[LLM Rewrite Request]
-    G --> H[Strict Diff/Patch Generation]
-    H --> I[Human Approval / Diff Preview]
-    I -->|Approved| J[Syntax Sentinel Validation]
-    J -->|Valid| K[Patch Applied]
-    K --> L[Git Commit]
-    I -->|Rejected| C
+Operon utilizes an **Agentic State Machine / ReAct (Reasoning + Acting) Architecture** paired with a **Multi-Agent Human-in-the-Loop (HITL)** pattern.
+
+* *Why?* Single-prompt generation fails on complex codebases. The state machine allows the agent to iteratively search, read, and write. The multi-agent setup splits responsibilities (Coder vs. Reviewer) to prevent hallucinations, while the HITL Approval Gate prevents destructive, unverified file writes.
+
+#### 1.2 System component map
+
+* **TUI (Text User Interface):** Renders the chat, diff previews, and approval prompts.
+* **Loop Engine (`agent/loop.py`):** The core heartbeat. Manages the state machine, loop detection, and tool routing.
+* **Planner Agent:** High-level architectural thinker. Decomposes the user goal into a step-by-step plan.
+* **Coder Agent:** The primary worker. Uses search and read tools to find context, then uses `rewrite_function` or `create_file` to modify code.
+* **Reviewer Agent:** The verifier. Examines the Coder's patches, approves or rejects them, and generates final contextual Git commits.
+* **Semantic Memory (`agent/semantic_memory.py`):** Vector database engine generating embeddings of the codebase to allow for natural language code querying.
+* **Diff Engine (`tools/diff_engine.py`):** Processes strict `<<<<<<< SEARCH / ======= / >>>>>>> REPLACE` blocks to perform surgical code edits without rewriting whole files.
+* **Tool Jail (`agent/tool_jail.py`):** Security boundary preventing agents from calling unauthorized tools.
+
+#### 1.3 Data flow overview
+
+1. User submits a prompt via the TUI.
+2. Planner generates an execution plan.
+3. System transitions to Coder phase.
+4. Coder invokes tools (e.g., `semantic_search`, `read_file`) to gather context.
+5. Coder invokes `rewrite_function` with a patch.
+6. The Diff Engine validates the patch and runs syntax checks.
+7. Execution pauses. The TUI prompts the human for `Approve (y)` or `Reject (n)`.
+8. On approval, the patch is written to disk.
+9. System auto-handoffs to the Reviewer, injecting the updated file context.
+10. Reviewer verifies the goal is met and calls `finish` with a dynamic commit message.
+
+#### 1.4 ASCII architecture diagram
+
+```text
+                          +-------------------+
+                          |    User / TUI     |
+                          +--------+----------+
+                                   | (Goal)
+                                   v
++-------------------------------------------------------------------------+
+|                              STATE ENGINE                               |
+|                                                                         |
+|  +-------------+       +------------------+       +------------------+  |
+|  |   PLANNER   | ----> |      CODER       | <---> |     REVIEWER     |  |
+|  +-------------+       +--------+---------+ (Fix) +---------+--------+  |
+|                                 |                           |           |
++---------------------------------|---------------------------|-----------+
+                                  |                           |
+             +--------------------+---------------------------+
+             |                    |                           |
+      +------v-------+    +-------v-------+           +-------v--------+
+      |  Read/Search |    | Write / Patch |           | Commit / Final |
+      |    Tools     |    |    Tools      |           |     Tools      |
+      +------+-------+    +-------+-------+           +-------+--------+
+             |                    |                           |
++------------v--------------------v---------------------------v-----------+
+|                              LOCAL WORKSPACE                            |
+|                                                                         |
+|  [ LanceDB Vector Store ]   [ Git Repository ]   [ Syntax Parsers ]     |
++-------------------------------------------------------------------------+
+
 ```
 
-📁 Repository Structure
-The Engine (/agent/)
- * loop.py: 🔥 The Heart. The main execution engine. It controls reading files, triggering rewrites, managing the ReAct decision loop, handling approval flows, and enforcing anti-hallucination safeguards.
- * planner.py: Translates the user goal into high-level steps. Provides guidance, but the Loop Engine remains in control.
- * decide.py: The fallback decision system. When the next action isn't strictly programmatic, it asks the LLM: "What tool should we use next?"
- * approval.py: The human-in-the-loop gatekeeper. Stops the agent from executing dangerous operations without confirmation.
- * llm.py: The thin wrapper around your local model (e.g., llama.cpp / Qwen / Llama 3). It handles prompt formatting and JSON parsing. No core agent logic lives here.
- * logger.py: Handles detailed, colorized terminal output and session logging.
-The Hands (/tools/)
- * fs_tools.py: Safe filesystem operations (read_file, write_file).
- * repo_search.py: Greps the repository for keywords and file hits to build context.
- * function_locator.py: Parses AST to find the exact file and line numbers of specific functions.
- * code_slice.py: Extracts the exact block of code for a function, allowing for surgical, context-aware edits.
- * diff_engine.py: Parses <<<<<<< SEARCH / ======= / >>>>>>> REPLACE blocks generated by the LLM and strictly applies them to the file.
- * git_tools.py: Automatically handles git add, git commit, and staging after successful, syntax-validated rewrites.
-The Memory (/runtime/)
- * state.py: Tracks the current AgentState, including the goal, files read, files modified, step count, observations, error logs, and episodic memory.
-🔧 How rewrite_function Actually Works
-Operon does not trust the LLM to write full files. It forces the LLM to act as a diff tool.
- * Locate: Operon detects the target file/function.
- * Read: Operon loads the specific file into the LLM's context.
- * Prompt: The LLM is instructed to output exact SEARCH and REPLACE blocks.
- * Parse: Operon parses the blocks, stripping markdown fences.
- * Preview: Operon prints a clear CHANGE: [Old] → [New] preview in the terminal.
- * Approve: The user must explicitly type y to approve the specific change.
- * Match: Operon attempts a strict character-for-character match of the SEARCH block.
- * Fallback: If strict matching fails due to LLM spacing quirks, Operon falls back to a Whitespace-Normalized Regex Matcher.
- * Validate: Operon runs the patched file through an AST SyntaxError sentinel. If the syntax is invalid, the patch is rolled back immediately.
- * Apply: The file is saved.
-🛡️ Safeguards & Anti-Hallucination
-Operon is built to handle the chaotic nature of smaller, local LLMs (7B-14B parameters):
- * Premature Finish Blocker: If the agent tries to call finish without modifying any files, Operon physically intercepts the command and forces it to continue.
- * Multi-File Safeguard: If the agent reads 3 files but only patches 1, Operon intercepts the finish command and reminds the agent of the unpatched files.
- * Infinite Loop Breaker: If the agent attempts to execute the exact same tool payload twice in a row, Operon blocks it, injects an error into the context, and forces the agent to try a different approach.
- * Syntax Sentinel: Code is parsed via ast.parse() before writing to disk. Broken Python code is instantly rejected.
-🚀 Future Roadmap
- * Phase 1 (Current): File reading, function detection, strict SEARCH/REPLACE block patching, syntax validation, multi-tasking, human approval.
- * Phase 2 (Next): Full multi-file reasoning (e.g., editing a function in A.py, updating the import in B.py, and modifying the helper in C.py in a single cohesive plan).
- * Phase 3: Autonomous debugging loop (modify → run test suite → if fail → read stdout → retry patch).
- * Phase 4: Full Claude-Code/Devin style autonomous operation without hand-holding.
-Built for local, deterministic, and safe autonomous development.
+---
 
+### 2. DIRECTORY & MODULE BREAKDOWN
+
+```text
+operon/
+├── agent/                  # Core agent reasoning and state logic
+│   ├── loop.py             # CRITICAL: Main execution loop, state transitions, loop overrides.
+│   ├── decide.py           # LLM API calls and tool JSON schemas.
+│   ├── planner.py          # Generates initial task breakdown.
+│   ├── repo.py             # General repository interactions.
+│   ├── git_safety.py       # Ensures agent operates on safe/correct branches.
+│   ├── approval.py         # Handles pausing for human patch approval.
+│   ├── semantic_memory.py  # Boots vector DB, chunks files, creates embeddings.
+│   ├── repo_search.py      # Routers for exact vs. semantic searches.
+│   └── tool_jail.py        # Validates tool calls against agent permissions.
+├── tools/                  # Executable functions the LLM can call
+│   ├── build_brain.py      # Ingest pipeline for the vector store.
+│   ├── diff_engine.py      # CRITICAL: Parses SEARCH/REPLACE blocks and applies them.
+│   ├── fs_tools.py         # File system operations.
+│   ├── universal_parser.py # Syntax validation (AST, Tree-sitter) to prevent broken code.
+│   └── function_locator.py # Finds specific function definitions.
+├── tui/                    # User Interface
+│   └── app.py              # Textual/Rich based terminal UI.
+├── runtime/
+│   └── state.py            # Global state object (history, context_buffer, phase, loop_counters).
+├── main.py                 # Application entry point.
+└── operon.log              # Detailed system logs.
+
+```
+
+---
+
+### 3. TECHNOLOGY STACK
+
+* **Languages:** Python 3.10+ (Agent codebase).
+* **Frameworks:** * *Flask* (seen in test logs for dummy apps).
+* *LanceDB*: Used for embedded, local vector search (`semantic_memory`).
+* *ONNX Runtime / Zero-PyTorch*: Used to generate vector embeddings locally without heavy PyTorch dependencies.
+* *LiteLLM (WIP)*: Universal router for LLM API calls (OpenAI, Anthropic, OpenRouter).
+
+
+* **Infrastructure:** Local runtime execution. Operates directly on the host machine's filesystem.
+* **Build/Package:** `pip` / `requirements.txt`.
+* **Deployment:** Runs locally as a CLI/TUI tool. No cloud deployment required.
+
+---
+
+### 4. FEATURE & FUNCTIONALITY INVENTORY
+
+* **Semantic Repository Indexing:**
+* *What it does:* Scans the codebase on boot, chunks code, and saves to LanceDB.
+* *Entry points:* `semantic_memory.py` -> `boot_semantic_memory()`.
+
+
+* **Tool-Augmented Reasoning:**
+* *What it does:* Agents can dynamically call tools based on React prompts.
+* *Entry points:* `agent/loop.py`, `agent/decide.py`.
+
+
+* **Fuzzy File Finding:**
+* *What it does:* Allows LLM to find files without knowing exact paths (`find_file`).
+
+
+* **Surgical Code Patching:**
+* *What it does:* Uses `rewrite_function` with precise `<<<<<<< SEARCH` and `>>>>>>> REPLACE` boundaries to edit code safely.
+
+
+* **Pre-write Syntax Validation:**
+* *What it does:* Routes patched code through `tools.universal_parser.check_syntax` *before* presenting it to the user, blocking syntax errors.
+
+
+* **Human-in-the-Loop Approval:**
+* *What it does:* Pauses the engine thread, updates the TUI with a diff preview, and waits for human `y/n`.
+
+
+* **Infinite Loop Detection:**
+* *What it does:* Detects if the agent repeats the exact same tool call (e.g., `read_file` 3 times). Wipes memory and forces a Reviewer handoff to break the hallucination cycle.
+
+
+* **Dynamic Auto-Commits:**
+* *What it does:* The Reviewer generates a contextual git commit summarizing its verified work and executes it.
+
+
+
+---
+
+### 5. API SURFACE
+
+**Internal Tool API (Exposed to LLM via JSON Schemas in `decide.py`):**
+
+* `read_file(file_path)`: Returns raw file text.
+* `semantic_search(query)`: Returns top K code snippets matching intent.
+* `exact_search(term)`: Returns exact string matches with line numbers.
+* `find_file(search_term)`: Fuzzy searches file names across the repository.
+* `create_file(file_path, initial_content)`: Bootstraps new files.
+* `rewrite_function(file_path, search_block, replace_block)`: Applies surgical diffs.
+* `reject_step(reason)`: (Reviewer only) Bounces task back to Coder.
+* `approve_step()`: (Reviewer only) Approves current state.
+* `finish(commit_message)`: Ends the run and commits.
+
+---
+
+### 6. DATA MODEL
+
+**Database:** LanceDB (Local)
+
+* **Type:** Embedded Vector Database.
+* **Schema (Code Snippets):**
+* `id` (string): Unique chunk ID.
+* `file_path` (string): Relative path.
+* `content` (string): Raw code text.
+* `vector` (Array[float]): ONNX-generated embedding.
+
+
+
+```text
+[ Document / Code File ]
+         | (chunked via build_brain.py)
+         v
+[ LanceDB Table: "repo_index" ]
+  |-- id
+  |-- file_path
+  |-- content
+  |-- vector
+
+```
+
+---
+
+### 7. CORE LOGIC EXPLANATION
+
+**The Agent Loop (`agent/loop.py`):**
+The system runs a `while True:` loop governed by `state.phase`.
+
+1. Calls LLM via `decide.py` based on current phase and context.
+2. Parses the JSON tool call.
+3. Updates loop counters to detect repeated actions.
+4. Executes the Python tool function.
+5. If `rewrite_function` succeeds:
+* Triggers human approval.
+* Reads the *newly updated* code from disk.
+* Injects `state.context_buffer = {target_file: updated_code}` to prevent Reviewer blindness.
+* Transitions `state.phase = "REVIEWER"`.
+
+
+
+**Diff Engine logic (`tools/diff_engine.py`):**
+The search block *must* perfectly match the original file (including whitespace). The engine finds the start index of the search block in the target string and replaces it with the replace block. If the search block is empty, it appends to the file.
+
+---
+
+### 8. CONFIGURATION & ENVIRONMENT
+
+* **`.env`:** Holds `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc.
+* **`MAX_STEPS`:** Integer (currently `50` in `loop.py`) dictating the maximum tool calls before the agent forcefully aborts to prevent runaway API costs.
+* **Vector Models:** Can be configured to swap out ONNX models for heavier PyTorch ones depending on host machine specs.
+
+---
+
+### 9. SECURITY MODEL
+
+* **Tool Jail:** Implemented in `tool_jail.py`. The `REVIEWER` phase is strictly blocked from using `rewrite_function` or `create_file`. If it attempts to, it is intercepted and warned.
+* **Git Safety:** `git_safety.py` ensures the agent isn't running loose on `main`. It operates on safe branches (e.g., `api`).
+* **Execution boundaries:** The agent operates strictly within `repo_root`. Path traversal protections should be assumed or explicitly enforced in `fs_tools.py`.
+
+---
+
+### 10. TESTING STRATEGY
+
+* Operon tests itself primarily via integration runs on dummy files (e.g., scaffolding `api_test.py` with Flask endpoints or modifying `test.js`).
+* Unit tests focus on `universal_parser.py` (ensuring AST parsing doesn't falsely flag good code or allow bad code) and `diff_engine.py` (edge cases in SEARCH/REPLACE whitespace).
+
+---
+
+### 11. BUILD / RUN / DEPLOY INSTRUCTIONS
+
+1. **Install:** ```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+```
+
+
+2. **Run:**
+```bash
+python tui/app.py
+
+```
+
+
+3. **Interact:** Type goals in the bottom TUI input. Watch the workspace/diff preview on the right. Approve via `(y)` / `(n)` buttons or keystrokes.
+
+---
+
+### 12. KNOWN TECH DEBT & DESIGN TRADEOFFS
+
+* **Reviewer Context Blindness:** Previously, wiping the `context_buffer` before handing off to the Reviewer caused infinite loops (Reviewer rejected patches because it couldn't see them). Fixed by explicitly reading the patched file and passing it to the Reviewer's prompt.
+* **Search/Replace Fragility:** If the LLM misses a single space in the `SEARCH` block, the diff fails. The agent handles this by retrying, but it burns API tokens.
+* **LiteLLM Migration:** Currently migrating away from hardcoded LLM endpoints toward a universal LiteLLM router in `decide.py` to support multiple backends.
+
+---
+
+### 13. IMPORTANT CODE PATH WALKTHROUGH
+
+**Scenario:** "inside main.py - add import json on top"
+
+1. **TUI Input:** User submits the goal.
+2. **`loop.py`:** Initiates `PLANNER`. Planner outputs: `["1. Open main.py", "2. Add import"]`.
+3. **`loop.py`:** Transitions to `CODER`.
+4. **`decide.py`:** Calls LLM. LLM returns `{"action": "read_file", "file_path": "main.py"}`.
+5. **`loop.py`:** Executes `read_file`, appends content to `state.observations`.
+6. **`decide.py`:** LLM sees file, returns `{"action": "rewrite_function", "search": "import os", "replace": "import os\nimport json"}`.
+7. **`loop.py` -> `diff_engine.py`:** Replaces the text. Passes to `universal_parser.py` which passes AST validation.
+8. **`approval.py`:** TUI pauses. Human presses `y`. File written to disk.
+9. **`loop.py`:** Auto-Handoff logic fires. File read from disk. `state.context_buffer` populated. Phase changes to `REVIEWER`.
+10. **`decide.py`:** Reviewer LLM sees the goal and the new file context. Returns `{"action": "finish", "commit_message": "Added json import to main.py"}`.
+11. **`loop.py`:** Executes subprocess `git commit -m "..."`. Goal complete.
+
+---
+
+### 14. GLOSSARY OF INTERNAL TERMS
+
+* **TUI:** Textual/Terminal User Interface.
+* **Phase:** The current agent persona active in the state machine (`PLANNER`, `CODER`, `REVIEWER`).
+* **Tool Jail:** The interceptor that blocks unauthorized tool usage.
+* **Search Block / Replace Block:** The strict text segments used by `diff_engine` to patch code.
+* **Loop Override:** A system-level intervention when an agent gets stuck repeating the same tool (detected by matching previous actions).
+
+---
+
+### 15. LLM HANDOFF SUMMARY (CRITICAL)
+
+**To the next LLM taking over Operon maintenance:**
+
+1. **How to reason about this codebase:** Treat `agent/loop.py` as the absolute source of truth for flow control. If the agent gets "stuck" or loops, the fix is *always* in how state, context buffers, or observations are passed around in `loop.py`.
+2. **Critical Files:**
+* `agent/loop.py`: The state machine.
+* `agent/decide.py`: Where you add/modify tools and LLM prompting.
+* `tools/diff_engine.py`: If code editing is failing, this is the culprit.
+
+
+3. **Typical Bug Locations:**
+* *Context Loss:* If the Coder or Reviewer acts "blind", check what is appended to `state.observations` and `state.context_buffer` right before the LLM is called.
+* *Infinite Loops:* The LLM will repeatedly call `rewrite_function` if the file doesn't exist. Ensure `create_file` or `find_file` is properly promoted in the system prompt.
+
+
+4. **Safe Extension Patterns:**
+* To add a new capability (e.g., running tests):
+1. Create the tool logic in `tools/run_tests.py`.
+2. Add the JSON schema to `agent/decide.py`.
+3. Add the `elif act == "run_tests":` execution block in `agent/loop.py`.
+
+
+
+
+5. **Dangerous Modification Areas:**
+* **Do NOT** alter the strict requirements of the `<<<<<<< SEARCH` format without fundamentally rewriting `diff_engine.py`. The LLMs must output perfect matches.
+* **Do NOT** wipe `state.context_buffer` blindly during handoffs, or the receiving agent will hallucinate. Always re-inject actual disk state.
