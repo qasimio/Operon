@@ -494,61 +494,70 @@ def run_agent(state):
         # ----------------- Redundant read_file short-circuit (improved) -----------------
         # Reset consecutive-read counters when a different tool runs so we only count
         # successive redundant reads (helps detect stuck state without accumulating forever).
-        if act != "read_file" and getattr(state, "skip_counts", None):
-            try:
+# ----------------- Redundant read_file short-circuit (final stable) -----------------
+
+        # Ensure skip counter storage exists
+        if not hasattr(state, "skip_counts") or state.skip_counts is None:
+            state.skip_counts = {}
+
+        # Reset counters whenever a NON-read action runs
+        if act != "read_file":
+            if state.skip_counts:
                 state.skip_counts.clear()
-            except Exception:
-                state.skip_counts = {}
 
         if act == "read_file":
             path = normalized_payload.get("path")
             if path:
                 try:
                     in_memory = state.context_buffer.get(path)
-                    # If already loaded and non-empty, compare to disk (if exists)
+
                     if in_memory is not None:
+
                         disk_path = Path(state.repo_root) / path
                         try:
                             disk_text = disk_path.read_text(encoding="utf-8") if disk_path.exists() else ""
                         except Exception:
                             disk_text = ""
 
-                        # If in-memory matches disk (or disk empty but memory present), consider it redundant
-                        if (in_memory.strip() and in_memory.strip() == disk_text.strip()) or (in_memory.strip() and not disk_text):
-                            # maintain per-path skip counts to detect a stuck loop
-                            if not hasattr(state, "skip_counts") or state.skip_counts is None:
-                                state.skip_counts = {}
-                            state.skip_counts[path] = state.skip_counts.get(path, 0) + 1
+                        redundant = (
+                            (in_memory.strip() and in_memory.strip() == disk_text.strip())
+                            or (in_memory.strip() and not disk_text)
+                        )
 
-                            log.info(f"SKIP: redundant read_file for '{path}' (already loaded). [skip#{state.skip_counts[path]}]")
+                        if redundant:
+
+                            # increment consecutive skip counter
+                            state.skip_counts[path] = state.skip_counts.get(path, 0) + 1
+                            skip_num = state.skip_counts[path]
+
+                            log.info(f"SKIP: redundant read_file for '{path}' (already loaded). [skip#{skip_num}]")
                             state.observations.append({"info": f"Skipped redundant read_file: {path}"})
                             state.action_log.append(f"SKIP read_file {path}")
 
-                            # Reset loop counter so the redundant-read doesn't push normal loop-detection.
+                            # prevent loop detector escalation
                             state.loop_counter = 0
-
-                            # Make last action canonical a noop to avoid repeated detection
                             state.last_action_canonical = canonicalize_payload({"action": "noop", "path": path})
 
-                            # If we skipped too many times in a row for the same file, escalate to REVIEWER
+                            # escalate only if agent is truly stuck
                             SKIP_THRESHOLD = 10
-                            if state.skip_counts[path] > SKIP_THRESHOLD:
-                                log.warning(f"Excessive redundant reads for '{path}' (>{SKIP_THRESHOLD}). Escalating to REVIEWER.")
-                                state.observations.append({"error": f"Too many redundant reads for {path}. Escalating to REVIEWER."})
+                            if skip_num > SKIP_THRESHOLD:
+                                log.warning(f"Too many redundant reads for '{path}'. Escalating to REVIEWER.")
+                                state.observations.append({
+                                    "error": f"Agent repeatedly re-read {path}. Escalating to REVIEWER."
+                                })
                                 state.phase = "REVIEWER"
-                                # clear per-path skip counter to avoid repeated escalation spam
                                 state.skip_counts[path] = 0
-                                # do not count as a step — reviewer escalation is a control move
                                 time.sleep(0.1)
                                 continue
 
-                            # short sleep to avoid busy-looping, but DO NOT increment state.step_count here.
+                            # short pause but DO NOT increment step_count
                             time.sleep(0.1)
                             continue
+
                 except Exception as _e:
-                    # If our skip-check fails for some reason, fallback to normal behavior (do not crash)
                     log.debug(f"redundant-read check failed for {path}: {_e}")
-# ---------------------------------------------------------------------
+
+        # ---------------------------------------------------------------------
 # ---------------------------------------------------------------------
 
         # short-circuit malformed/noop actions
@@ -756,6 +765,13 @@ def run_agent(state):
 
                 if obs.get("success"):
                     log.info(f"Successfully patched {target_file}")
+
+                # reset loop + reducndat-read
+                    if hasattr(state, "skip_counts"):
+                        state.skip_counts.clear()
+                    state.loop_counter = 0
+                    state.last_action_canonical = None
+
                     state.action_log.append(f"SUCCESS: Applied code patch to '{target_file}'.")
                     log.info("[bold cyan]🔄 Auto-Handing off to REVIEWER...[/bold cyan]")
                     state.phase = "REVIEWER"
