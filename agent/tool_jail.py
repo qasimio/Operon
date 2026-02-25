@@ -4,13 +4,15 @@ CODER_TOOLS = {
     "semantic_search": ["query"],
     "exact_search": ["text"],
     "read_file": ["path"],
-    "rewrite_function": ["file"]
+    "rewrite_function": ["file"],
+    "create_file": ["file_path", "initial_content"],
+    "find_file": ["search_term"]
 }
 
 REVIEWER_TOOLS = {
     "approve_step": ["message"],
     "reject_step": ["feedback"],
-    "finish": ["message"]
+    "finish": ["commit_message"]
 }
 
 ALLOWED_ACTIONS = {**CODER_TOOLS, **REVIEWER_TOOLS}

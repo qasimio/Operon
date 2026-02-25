@@ -29,16 +29,20 @@ def decide_next_action(state) -> dict:
 1. {"action": "exact_search", "text": "variable_name"} (USE THIS to find exact variables, functions, or strings)
 2. {"action": "semantic_search", "query": "conceptual question"} (USE THIS for vague concepts)
 3. {"action": "read_file", "path": "exact/path.py"}
-4. {"action": "rewrite_function", "file": "exact/path.py"}"""
+4. {"action": "rewrite_function", "file": "exact/path.py"}
+5. {"action": "create_file", "file_path": "new/file.py", "initial_content": ""}
+6. {"action": "find_file", "search_term": "filename or unique string in file"}
+"""
 
         task = f"Execute this Milestone: '{current_step_text}'\n{tactical_advice}"
 
-    else: # REVIEWER
+    else:  # REVIEWER
         persona = "You are Operon's STRICT CODE REVIEWER."
         tools = """
 1. {"action": "approve_step", "message": "Reasoning"} (Use if the SYSTEM OBSERVATIONS confirm a successful rewrite)
 2. {"action": "reject_step", "feedback": "Instructions to fix"} (Use if the Coder failed the milestone)
-3. {"action": "finish", "message": "Victory"} (Use ONLY if ALL plan milestones are complete)"""
+3. {"action": "finish", "commit_message": "Short git commit summary"} (Ends the task. Use this ONLY when the Coder has fully and correctly met the goal.)
+"""
         
         task = f"Verify Completion of Milestone: '{current_step_text}'. Look at SYSTEM OBSERVATIONS. If a file was successfully patched and meets the goal, approve it."
 
@@ -68,15 +72,24 @@ REQUIREMENT: Output STRICT JSON. Do NOT wrap in markdown blocks.
     "tool": {{"action": "...", ...}}
 }}
 """
+
     log.debug(f"Calling LLM for {phase}...")
     raw_output = call_llm(prompt, require_json=True)
     
-    clean_json = re.sub(r"```(?:json)?\n?(.*?)\n?```", r"\1", raw_output, flags=re.DOTALL).strip()
+    clean_json = re.sub(r"(?:json)?\n?(.*?)\n?``", r"\1", raw_output, flags=re.DOTALL).strip()
     try:
         data = json.loads(clean_json)
+        # normalize: if user returned a top-level "action" object, wrap it under "tool"
+        if "tool" not in data and "action" in data:
+            return {"thought": data.get("thought",""), "tool": data}
         if "tool" not in data:
-            return {"thought": "Auto-fallback", "tool": data}
+            # If the model returned direct tool dict (rare), coerce it
+            if isinstance(data, dict) and any(k in data for k in ("action", "file", "path", "query", "text")):
+                return {"thought": data.get("thought", ""), "tool": data}
+            # fallback: return the data under "tool" if it's already the correct shape
+            return {"thought": data.get("thought", "Auto-fallback"), "tool": data.get("tool", data)}
         return data
     except Exception as e:
-        log.error("JSON PARSE ERROR. Forcing fallback.")
+        log.error(f"JSON PARSE ERROR from LLM: {e}")
+        # Fallback conservative action so run_agent can keep going
         return {"thought": "JSON failed.", "tool": {"action": "error"}}

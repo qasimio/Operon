@@ -253,6 +253,53 @@ def run_agent(state):
                 state.context_buffer[path] = obs["content"]
                 state.observations.append({"success": f"Loaded {path} into memory."})
                 state.action_log.append(f"Loaded '{path}' into memory.")
+        
+
+        elif act == "find_file":
+                term = action_payload.get("search_term", "").lower()
+                root = Path(state.repo_root)
+                matches = []
+                
+                # Perform a fuzzy search across the repo
+                for p in root.rglob("*"):
+                    if p.is_file() and ".git" not in p.parts and term in p.name.lower():
+                        matches.append(str(p.relative_to(root)))
+                
+                if matches:
+                    state.observations.append({"find_file": f"Found {len(matches)} matching files:\n" + "\n".join(matches)})
+                else:
+                    state.observations.append({"find_file": f"No files found matching '{term}'. Try semantic search instead."})
+
+        elif act == "create_file":
+
+            from agent.approval import ask_user_approval
+
+            file_path = action_payload.get("file_path")
+            content = action_payload.get("initial_content", "")
+
+            payload = {
+                "file": file_path,
+                "search": "",
+                "replace": content
+            }
+
+            # 🔴 ASK APPROVAL BEFORE WRITING
+            if not ask_user_approval("create_file", payload):
+                state.observations.append({"error": "User rejected file creation."})
+                state.action_log.append(f"FAILED: User rejected creating {file_path}")
+                continue
+
+            full_path = Path(state.repo_root) / file_path
+
+            if full_path.exists():
+                state.observations.append({"error": f"File {file_path} already exists."})
+            else:
+                full_path.parent.mkdir(parents=True, exist_ok=True)
+                full_path.write_text(content, encoding="utf-8")
+
+                state.action_log.append(f"Created new file: {file_path}")
+                state.observations.append({"success": f"File {file_path} created successfully."})
+                log.info(f"📄 Created new file: {file_path}")
 
         elif act == "rewrite_function":
             target_file = action_payload.get("file")
@@ -281,6 +328,20 @@ def run_agent(state):
                     "system": f"Coder successfully modified {target_file}. REVIEWER MUST look at the updated file in context and verify the goal was met before rejecting.",
                     "file_preview": updated_code[:2000] # Inject a preview so it doesn't even need to use read_file
                 })
+
+        elif act == "finish":
+                # Fallback message just in case the LLM acts up
+                fallback_msg = f"Operon Auto-Commit: Completed task -> {state.goal[:30]}..."
+                commit_msg = action_payload.get("commit_message", fallback_msg)
+                
+                log.info(f"[bold green]✅ All steps complete! Committing: '{commit_msg}'[/bold green]")
+                
+                # Execute the dynamic git commit
+                import subprocess
+                subprocess.run(["git", "add", "."], cwd=state.repo_root)
+                subprocess.run(["git", "commit", "-m", commit_msg], cwd=state.repo_root)
+                
+                return "DONE"
 
         time.sleep(0.2)
 
