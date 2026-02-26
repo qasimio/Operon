@@ -1,6 +1,7 @@
 # main.py
 import sys
 from tui.app import OperonUI
+import json
 
 if __name__ == "__main__":
     try:

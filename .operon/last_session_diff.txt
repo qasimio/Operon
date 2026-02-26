@@ -1,31 +1,36 @@
 OPERON DIFF REPORT
 ======================================================================
 
-FILE: print.js
+FILE: main.py
 ----------------------------------------------------------------------
 
-PATCH @ 2026-02-26T19:01:43.943345
+PATCH @ 2026-02-26T19:17:23.324341
 ------------------------------
---- a/print.js
-+++ b/print.js
-@@ -1,10 +1,5 @@
- console.log(1);
+--- a/main.py
++++ b/main.py
+@@ -1,6 +1,7 @@
+ # main.py
 
- console.log(2);
+ import sys
 
- console.log(3);
+ from tui.app import OperonUI
 
--console.log(4);
++import json
 
--console.log(5);
+ 
 
--console.log(6);
+ if __name__ == "__main__":
 
--console.log(7);
+     try:
 
--console.log(8);
+@@ -8,4 +9,4 @@
+         app.run()
 
- console.log(9);
+     except KeyboardInterrupt:
 
- console.log(10);
+         print("\nOperon shut down safely.")
+
+-        sys.exit(0)
++        sys.exit(0)
+
 

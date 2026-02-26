@@ -333,72 +333,72 @@
       {
         "name": "_ensure_state_fields",
         "start": 27,
-        "end": 41
+        "end": 42
       },
       {
         "name": "_goal_achieved",
-        "start": 44,
-        "end": 67
+        "start": 45,
+        "end": 68
       },
       {
         "name": "canonicalize_payload",
-        "start": 70,
-        "end": 74
+        "start": 71,
+        "end": 75
       },
       {
         "name": "normalize_action_payload",
-        "start": 77,
-        "end": 99
+        "start": 78,
+        "end": 100
       },
       {
         "name": "resolve_repo_path",
-        "start": 102,
-        "end": 114
+        "start": 103,
+        "end": 115
       },
       {
         "name": "is_noop_action",
-        "start": 117,
-        "end": 124
+        "start": 118,
+        "end": 125
       },
       {
         "name": "_register_recent_action",
-        "start": 127,
-        "end": 132
+        "start": 128,
+        "end": 133
       },
       {
         "name": "_detect_alternating_loop",
-        "start": 135,
-        "end": 146
+        "start": 136,
+        "end": 147
       },
       {
         "name": "_increment_search_count",
-        "start": 149,
-        "end": 156
+        "start": 150,
+        "end": 157
       },
       {
         "name": "_should_throttle_search",
-        "start": 159,
-        "end": 166
+        "start": 160,
+        "end": 167
       },
       {
         "name": "_detect_function_from_goal",
-        "start": 169,
-        "end": 175
+        "start": 170,
+        "end": 176
       },
       {
         "name": "_persist_diff_memory",
-        "start": 178,
-        "end": 196
+        "start": 179,
+        "end": 197
       },
       {
         "name": "_rewrite_function",
-        "start": 200,
-        "end": 336
+        "start": 201,
+        "end": 370
       },
       {
         "name": "run_agent",
-        "start": 341,
-        "end": 741
+        "start": 375,
+        "end": 781
       }
     ],
     "classes": []
