@@ -272,7 +272,7 @@
       {
         "name": "decide_next_action",
         "start": 153,
-        "end": 280
+        "end": 281
       }
     ],
     "classes": []
@@ -392,13 +392,13 @@
       },
       {
         "name": "_rewrite_function",
-        "start": 201,
-        "end": 392
+        "start": 200,
+        "end": 336
       },
       {
         "name": "run_agent",
-        "start": 397,
-        "end": 779
+        "start": 341,
+        "end": 741
       }
     ],
     "classes": []
