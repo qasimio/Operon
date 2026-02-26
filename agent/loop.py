@@ -244,40 +244,73 @@ def _rewrite_function(state, code_to_modify: str, file_path: str) -> dict:
         return {"success": True, "file": file_path, "message": "Deterministic line deletion applied."}
 
     # ─────────────────────────────────────────────
-    # 2. Deterministic IMPORT insertion
+    # Deterministic IMPORT insertion (robust)
     # ─────────────────────────────────────────────
-    imp = re.search(r"add import (.+)", goal)
-    if imp:
-        stmt = imp.group(1).strip()
-        if not stmt.startswith("import"):
-            stmt = f"import {stmt}"
+    import_match = re.search(r"(?:add\s+)?import\s+([a-zA-Z0-9_\.]+(?:\s+as\s+\w+)?)", goal)
+    if import_match:
+        module_stmt = import_match.group(1).strip()
+
+        if not module_stmt.startswith("import"):
+            module_stmt = f"import {module_stmt}"
 
         lines = file_text.splitlines()
 
-        if any(stmt in l for l in lines):
+        # Already exists?
+        if any(l.strip() == module_stmt.strip() for l in lines):
             return {"success": False, "error": "Import already exists."}
 
+        # Insert after last import
         insert_idx = 0
         for i, line in enumerate(lines):
             if line.startswith("import") or line.startswith("from"):
                 insert_idx = i + 1
 
-        lines.insert(insert_idx, stmt)
+        lines.insert(insert_idx, module_stmt)
         new_text = "\n".join(lines) + "\n"
 
         preview = {
             "file": file_path,
             "search": "",
-            "replace": stmt
+            "replace": module_stmt
         }
 
         if not ask_user_approval("rewrite_function", preview):
             return {"success": False, "error": "User rejected import insertion."}
 
         full_path.write_text(new_text, encoding="utf-8")
-        return {"success": True, "file": file_path, "message": "Deterministic import insertion applied."}
+        return {"success": True, "file": file_path, "message": "Import inserted deterministically."}
+        imp = re.search(r"add import (.+)", goal)
+        if imp:
+            stmt = imp.group(1).strip()
+            if not stmt.startswith("import"):
+                stmt = f"import {stmt}"
 
-    # ─────────────────────────────────────────────
+            lines = file_text.splitlines()
+
+            if any(stmt in l for l in lines):
+                return {"success": False, "error": "Import already exists."}
+
+            insert_idx = 0
+            for i, line in enumerate(lines):
+                if line.startswith("import") or line.startswith("from"):
+                    insert_idx = i + 1
+
+            lines.insert(insert_idx, stmt)
+            new_text = "\n".join(lines) + "\n"
+
+            preview = {
+                "file": file_path,
+                "search": "",
+                "replace": stmt
+            }
+
+            if not ask_user_approval("rewrite_function", preview):
+                return {"success": False, "error": "User rejected import insertion."}
+
+            full_path.write_text(new_text, encoding="utf-8")
+            return {"success": True, "file": file_path, "message": "Deterministic import insertion applied."}
+
+        # ─────────────────────────────────────────────
     # 3. LLM rewrite (complex only)
     # ─────────────────────────────────────────────
 
