@@ -1,78 +1,154 @@
+# tools/diff_engine.py — Operon v3
+"""
+Upgraded diff engine with:
+- Multiple SEARCH/REPLACE block parsers (handles Qwen formatting variations)
+- Fuzzy-line matching with configurable tolerance
+- Explicit deletion support
+- Meaningful return codes so callers know WHY a patch failed
+"""
+
 import re
+from typing import Optional
 
-def parse_search_replace(text: str):
+
+# ── Parser ────────────────────────────────────────────────────────────────────
+
+# Support multiple fence styles LLMs emit
+_PATTERNS = [
+    # canonical:  <<<<<<< SEARCH \n ... \n ======= \n ... \n >>>>>>> REPLACE
+    re.compile(
+        r"<{7}\s*SEARCH\r?\n(.*?)\r?\n={7}\r?\n(.*?)\r?\n>{7}\s*REPLACE",
+        re.DOTALL,
+    ),
+    # alternate: <<<<<<< / ======= / >>>>>>>
+    re.compile(
+        r"<{7}[^\n]*\r?\n(.*?)\r?\n={7}\r?\n(.*?)\r?\n>{7}[^\n]*",
+        re.DOTALL,
+    ),
+    # SEARCH: / REPLACE: block style
+    re.compile(
+        r"SEARCH:\s*\n(.*?)\nREPLACE:\s*\n(.*?)(?=\nSEARCH:|\Z)",
+        re.DOTALL,
+    ),
+]
+
+
+def parse_search_replace(text: str) -> list[tuple[str, str]]:
     """
-    Extracts SEARCH and REPLACE blocks from LLM output.
-    Returns a list of tuples: (search_block, replace_block)
+    Extract (search, replace) pairs from LLM output.
+    Tries multiple patterns, returns first non-empty result.
     """
-    pattern = r"<<<<<<<\s*SEARCH\n(.*?)\n=======\n(.*?)\n>>>>>>>\s*REPLACE"
-    matches = re.findall(pattern, text, re.DOTALL)
-    return matches
+    for pat in _PATTERNS:
+        matches = pat.findall(text)
+        if matches:
+            return [(s.strip("\n"), r.strip("\n")) for s, r in matches]
+    return []
 
-def _normalize_lines(text: str) -> list:
-    """Helper to strip whitespace from ends of lines but keep internal structure."""
-    return [line.strip() for line in text.strip().splitlines()]
 
-def apply_patch(original_text: str, search_block: str, replace_block: str) -> str | None:
+# ── Patch engine ──────────────────────────────────────────────────────────────
+
+def _normalize(lines: list[str]) -> list[str]:
+    return [l.strip() for l in lines]
+
+
+def _fuzzy_match(
+    orig_lines: list[str],
+    search_norm: list[str],
+    tolerance: int = 0,
+) -> Optional[int]:
     """
-    Applies the patch exactly once. Uses a smart line-by-line matcher 
-    that ignores leading/trailing whitespace differences caused by LLMs.
-    Now supports Appending and New File Creation.
+    Sliding window match. Returns start index or None.
+    tolerance=0  → exact (after strip)
+    tolerance>0  → allow that many mismatched lines in the window
     """
-    # 0. The "Append / Create" Maneuver
-    if not search_block.strip():
-        # If the search block is empty, the LLM just wants to add new code.
-        if original_text.strip():
-            # Append to existing file
-            return original_text.rstrip() + "\n\n" + replace_block.strip() + "\n"
-        else:
-            # File is completely new/empty
-            return replace_block.strip() + "\n"
-
-    # 1. Try exact match first (Fastest and safest)
-    if search_block in original_text:
-        return original_text.replace(search_block, replace_block, 1)
-
-    # 2. Smart Whitespace Matcher
-    orig_lines = original_text.splitlines()
-    search_norm = _normalize_lines(search_block)
-    search_len = len(search_norm)
-
-    if search_len == 0:
+    slen = len(search_norm)
+    if slen == 0:
         return None
-
-    # Slide a window over the original file to find a matching block
-    for i in range(len(orig_lines) - search_len + 1):
-        window = orig_lines[i : i + search_len]
-        window_norm = [line.strip() for line in window]
-        
-        if window_norm == search_norm:
-            # We found a match! Now preserve the original indentation.
-            original_indent = len(orig_lines[i]) - len(orig_lines[i].lstrip())
-            
-            replace_lines = replace_block.splitlines()
-            if replace_lines and replace_lines[0].strip():
-                replace_indent = len(replace_lines[0]) - len(replace_lines[0].lstrip())
-                indent_diff = original_indent - replace_indent
-                
-                adjusted_replace = []
-                for r_line in replace_lines:
-                    if not r_line.strip():
-                        adjusted_replace.append("")
-                    elif indent_diff > 0:
-                        adjusted_replace.append((" " * indent_diff) + r_line)
-                    elif indent_diff < 0 and r_line.startswith(" " * abs(indent_diff)):
-                        adjusted_replace.append(r_line[abs(indent_diff):])
-                    else:
-                        adjusted_replace.append(r_line)
-            else:
-                adjusted_replace = replace_lines
-
-            before = orig_lines[:i]
-            after = orig_lines[i + search_len:]
-            final_lines = before + adjusted_replace + after
-            
-            return "\n".join(final_lines) + "\n"
-
-    # 3. Fail safely if no match is found
+    for i in range(len(orig_lines) - slen + 1):
+        window = [l.strip() for l in orig_lines[i : i + slen]]
+        mismatches = sum(1 for a, b in zip(window, search_norm) if a != b)
+        if mismatches <= tolerance:
+            return i
     return None
+
+
+def _apply_indent(replace_block: str, original_indent: int) -> list[str]:
+    """Re-indent replace_block to match the original code's indentation."""
+    replace_lines = replace_block.splitlines()
+    if not replace_lines:
+        return []
+    first_content = next((l for l in replace_lines if l.strip()), "")
+    replace_indent = len(first_content) - len(first_content.lstrip())
+    diff = original_indent - replace_indent
+
+    result = []
+    for line in replace_lines:
+        if not line.strip():
+            result.append("")
+            continue
+        if diff > 0:
+            result.append(" " * diff + line)
+        elif diff < 0:
+            strip = abs(diff)
+            result.append(line[strip:] if line.startswith(" " * strip) else line)
+        else:
+            result.append(line)
+    return result
+
+
+def apply_patch(
+    original_text: str,
+    search_block: str,
+    replace_block: str,
+) -> tuple[Optional[str], str]:
+    """
+    Returns (patched_text | None, reason_string).
+
+    Reason is one of:
+      "ok"                    — patch applied
+      "appended"              — appended (empty search)
+      "no_match"              — search block not found
+      "noop"                  — patch would produce identical content
+    """
+    # ── Append / new-file mode ────────────────────────────────────────────────
+    if not search_block.strip():
+        if original_text.strip():
+            result = original_text.rstrip() + "\n\n" + replace_block.strip() + "\n"
+        else:
+            result = replace_block.strip() + "\n"
+        return result, "appended"
+
+    # ── 1. Exact string match ─────────────────────────────────────────────────
+    if search_block in original_text:
+        result = original_text.replace(search_block, replace_block, 1)
+        if result == original_text:
+            return result, "noop"
+        return result, "ok"
+
+    # ── 2. Whitespace-normalized exact match ──────────────────────────────────
+    orig_lines  = original_text.splitlines()
+    search_norm = _normalize(search_block.splitlines())
+    idx = _fuzzy_match(orig_lines, search_norm, tolerance=0)
+
+    if idx is not None:
+        original_indent = len(orig_lines[idx]) - len(orig_lines[idx].lstrip())
+        adjusted = _apply_indent(replace_block, original_indent)
+        final = orig_lines[:idx] + adjusted + orig_lines[idx + len(search_norm):]
+        result = "\n".join(final) + "\n"
+        if result.strip() == original_text.strip():
+            return result, "noop"
+        return result, "ok"
+
+    # ── 3. Fuzzy match (only for multi-line blocks — avoid false positives) ───
+    if len(search_norm) >= 3:
+        idx = _fuzzy_match(orig_lines, search_norm, tolerance=1)
+        if idx is not None:
+            original_indent = len(orig_lines[idx]) - len(orig_lines[idx].lstrip())
+            adjusted = _apply_indent(replace_block, original_indent)
+            final = orig_lines[:idx] + adjusted + orig_lines[idx + len(search_norm):]
+            result = "\n".join(final) + "\n"
+            if result.strip() == original_text.strip():
+                return result, "noop"
+            return result, "ok"
+
+    return None, "no_match"

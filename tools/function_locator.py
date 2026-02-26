@@ -1,39 +1,32 @@
-import json
+# tools/function_locator.py — Operon v3
 from pathlib import Path
+import json
+from tools.universal_parser import extract_symbols
+
+IGNORE = {".git", ".venv", "__pycache__", "node_modules", "dist", "build", ".operon"}
 
 
-def find_function(repo_root: str, name: str):
+def find_function(repo_root: str, func_name: str) -> dict | None:
     """
-    Return file + start/end lines for a function or class.
+    Search the repo for a function or class by name.
+    Returns {"file": rel_path, "start": int, "end": int} or None.
     """
-
-    brain_path = Path(repo_root) / "repo_files.json"
-
-    if not brain_path.exists():
-        return None
-
-    data = json.loads(brain_path.read_text())
-
-    for file, info in data.items():
-
-        # search functions
-        for f in info.get("functions", []):
-            if f["name"].split(".")[-1] == name:
-                return {
-                    "file": file,
-                    "start": f["start"],
-                    "end": f["end"],
-                    "type": "function"
-                }
-
-        # search classes
-        for c in info.get("classes", []):
-            if c["name"] == name:
-                return {
-                    "file": file,
-                    "start": c["start"],
-                    "end": c["end"],
-                    "type": "class"
-                }
-
+    root = Path(repo_root)
+    for p in root.rglob("*"):
+        if not p.is_file() or any(d in p.parts for d in IGNORE):
+            continue
+        if p.suffix not in {".py", ".js", ".jsx", ".java", ".ts", ".tsx"}:
+            continue
+        try:
+            content = p.read_text(encoding="utf-8", errors="ignore")
+            syms = extract_symbols(content, str(p))
+            for item in syms.get("functions", []) + syms.get("classes", []):
+                if item["name"] == func_name:
+                    return {
+                        "file": str(p.relative_to(root)),
+                        "start": item["start"],
+                        "end":   item["end"],
+                    }
+        except Exception:
+            pass
     return None

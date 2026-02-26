@@ -1,28 +1,32 @@
+# agent/approval.py — Operon v3
 import agent.logger
+
 
 def ask_user_approval(action: str, payload: dict) -> bool:
     """
-    Pauses the worker thread and forces the TUI to mount an approval dialogue.
+    For rewrite_function and create_file: show diff in TUI and block until user decides.
+    All other actions: auto-approve.
     """
-    if action == "rewrite_function":
-        file_path = payload.get("file", "unknown")
-        search = payload.get("search", "# ⚠️ Error: Search block missing from payload")
-        replace = payload.get("replace", "# ⚠️ Error: Replace block missing from payload")
-        
-        # Access the LIVE reference from the module namespace!
+    if action in ("rewrite_function", "create_file"):
+        file_path = payload.get("file") or payload.get("file_path", "unknown")
+        search    = payload.get("search", "")
+        replace   = payload.get("replace", payload.get("initial_content", ""))
+
         if agent.logger.UI_SHOW_DIFF:
             agent.logger.UI_SHOW_DIFF(file_path, search, replace)
-            
-        agent.logger.log.info("[bold red]⚠️ WAITING FOR APPROVAL:[/bold red] Please check the right panel.")
-        
-        # Freeze this thread until the UI pushes a result into the queue
-        result = agent.logger.APPROVAL_QUEUE.get() 
-        
-        if result:
-            agent.logger.log.info("[bold green]✅ Patch Approved by User.[/bold green]")
         else:
-            agent.logger.log.warning("[bold red]❌ Patch REJECTED by User.[/bold red]")
-            
+            # Headless fallback: auto-approve
+            return True
+
+        agent.logger.log.info(
+            "[bold red]⚠️  WAITING FOR APPROVAL[/bold red] — review the diff panel."
+        )
+        result = agent.logger.APPROVAL_QUEUE.get()
+
+        if result:
+            agent.logger.log.info("[bold green]✅ Patch approved.[/bold green]")
+        else:
+            agent.logger.log.warning("[bold red]❌ Patch rejected by user.[/bold red]")
         return result
-        
+
     return True

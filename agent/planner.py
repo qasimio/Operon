@@ -1,46 +1,86 @@
-from agent.llm import call_llm
-from tools.repo_search import search_repo
+# agent/planner.py — Operon v3.1
 import json
 import re
+from agent.llm import call_llm
 from agent.logger import log
 
-def make_plan(goal: str, repo_root: str):
-    log.info("[bold magenta]🏛️ ARCHITECT: Gathering context for plan...[/bold magenta]")
-    
-    context = search_repo(repo_root, goal)
-    
-    prompt = f"""You are Operon's ARCHITECT.
-Your job is to break down the user's goal into logical, high-level MILESTONES.
 
-USER GOAL: {goal}
+def make_plan(goal: str, repo_root: str, state=None):
+    """Returns (steps, is_question, validators)."""
+    log.info("[bold magenta]🏛️ ARCHITECT: Building plan...[/bold magenta]")
 
-CRITICAL RULES:
-1. DO NOT output execution steps like "search for X", "read file Y", or "rewrite function". The Coder knows how to do its job.
-2. Output ONLY the actual coding objectives.
-3. Keep it as few steps as possible. If it's a simple task, a 1-step plan is perfect.
+    # Compact repo context
+    ctx = ""
+    if state is not None:
+        sym  = getattr(state, "symbol_index", {})
+        tree = getattr(state, "file_tree", [])
+        if sym:
+            sample = list(sym.items())[:8]
+            lines  = ["REPO SYMBOLS:"]
+            for rel, syms in sample:
+                fns = [f["name"] for f in syms.get("functions", [])[:3]]
+                lines.append(f"  {rel}: {fns}")
+            ctx = "\n".join(lines)
+        elif tree:
+            ctx = "REPO FILES:\n" + "\n".join(f"  {f}" for f in tree[:15])
 
-BAD PLAN:
-1. Search for max_steps
-2. Read the file
-3. Add a comment
-4. Save the file
+    prompt = f"""You are Operon's ARCHITECT. Produce a precise coding plan.
 
-GOOD PLAN:
-1. Locate the 'max_steps' variable and add the required comment above it.
+GOAL: {goal}
 
-Output strictly a JSON list of strings.
-    """
-    # ... rest of your LLM call ...
-    raw_output = call_llm(prompt, require_json=True)
-    clean_json = re.sub(r"```(?:json)?\n?(.*?)\n?```", r"\1", raw_output, flags=re.DOTALL).strip()
-    
+{ctx}
+
+Output STRICT JSON with exactly these keys:
+{{
+  "steps": ["short milestone string", ...],
+  "validators": [null or {{"type":"...", ...}}, ...],
+  "multi_file": [{{"file": "rel/path", "action": "rewrite|create", "description": "..."}}]
+}}
+
+Validator types:
+  {{"type":"not_contains","file":"path","text":"token"}}
+  {{"type":"contains","file":"path","text":"token"}}
+  {{"type":"lines_removed","file":"path","start":N,"end":M}}
+
+Rules:
+- steps and validators MUST have equal length.
+- null validator if unsure.
+- multi_file = [] if only one file changes.
+- Each step: one action, max 10 words.
+- Return ONLY JSON.
+"""
+    raw   = call_llm(prompt, require_json=True)
+    clean = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw.strip(), flags=re.DOTALL)
+
     try:
-        data = json.loads(clean_json)
-        steps = data.get("steps", [])
+        data       = json.loads(clean)
+        steps      = data.get("steps", [])
+        validators = data.get("validators", [None] * len(steps))
+        multi_file = data.get("multi_file", [])
+
+        if len(validators) < len(steps):
+            validators += [None] * (len(steps) - len(validators))
+
         if not steps:
-            # Fallback to prevent empty plan crashes
-            steps = ["1. Investigate the codebase", "2. Complete the objective"]
-        return steps, data.get("is_question", False)
-    except json.JSONDecodeError:
-        log.error("Architect failed to output JSON. Falling back to default plan.")
-        return ["1. Search for context", "2. Read the file", "3. Complete the task"], False
+            raise ValueError("Empty steps")
+
+        if state is not None and multi_file:
+            state.multi_file_queue = [
+                x for x in multi_file
+                if isinstance(x, dict) and x.get("file")
+            ]
+            if state.multi_file_queue:
+                log.info(
+                    f"[cyan]📁 Multi-file: "
+                    f"{[x['file'] for x in state.multi_file_queue]}[/cyan]"
+                )
+
+        log.info(f"[magenta]Plan ({len(steps)} steps):[/magenta]")
+        for i, s in enumerate(steps):
+            log.info(f"  {i+1}. {s}")
+
+        return steps, False, validators
+
+    except Exception as e:
+        log.error(f"Planner failed ({e}) — using fallback.")
+        return [goal], False, [None]

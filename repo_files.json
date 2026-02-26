@@ -1,6 +1,6 @@
 {
   "main.py": {
-    "summary": "This file is the entry point for an application that initializes and runs an instance of `OperonUI`, a user interface component, handling graceful shutdown on keyboard interrupts.",
+    "summary": "This file is the main entry point for an application that uses the `OperonUI` class from the `tui.app` module to create and run a user interface.",
     "functions": [],
     "classes": [],
     "imports": [
@@ -15,8 +15,14 @@
     "classes": [],
     "imports": []
   },
+  "print.js": {
+    "summary": "This file prints the numbers 1 through 10 to the console.",
+    "functions": [],
+    "classes": [],
+    "imports": []
+  },
   "readme.md": {
-    "summary": "This file is the README for the Operon project, which is an autonomous AI software engineer designed to navigate local repositories, reason about code, perform surgical file edits, verify its own work, and commit changes.",
+    "summary": "This file is the README for Operon, an advanced AI software engineer designed to navigate local repositories, reason about code, perform surgical file edits, verify its work, and commit changes through a text user interface-driven local CLI agent.",
     "functions": [],
     "classes": [],
     "imports": [
@@ -26,7 +32,7 @@
     ]
   },
   "repo_tree.json": {
-    "summary": "This file, `repo_tree.json`, appears to be a JSON representation of the file structure of a software repository, listing all files and directories within it.",
+    "summary": "This file represents the directory structure of a software project, listing all files and subdirectories.",
     "functions": [],
     "classes": [],
     "imports": []
@@ -38,7 +44,7 @@
     "imports": []
   },
   "tools/function_locator.py": {
-    "summary": "This file defines a function `find_function` that searches for a function or class by name within a repository, returning its file path and line range if found.",
+    "summary": "This file defines a function `find_function` that searches for a function or class by name within a repository, returning the file path and line range if found.",
     "functions": [
       {
         "name": "find_function",
@@ -54,7 +60,7 @@
     ]
   },
   "tools/universal_parser.py": {
-    "summary": "This file provides functions to parse, check syntax, and extract symbols from code in various programming languages using the Tree-sitter library.",
+    "summary": "This file provides functions to parse, check syntax, and extract symbols (functions and classes) from code in various programming languages using the Tree-sitter library.",
     "functions": [
       {
         "name": "get_parser",
@@ -116,7 +122,7 @@
     ]
   },
   "tools/diff_engine.py": {
-    "summary": "This file contains functions to parse search and replace blocks from text, normalize lines, and apply patches to original text by replacing matching blocks while handling leading/trailing whitespace differences.",
+    "summary": "This file contains functions to parse search and replace blocks from LLM output, normalize lines for comparison, and apply patches to original text by matching and replacing blocks while handling indentation and new file creation.",
     "functions": [
       {
         "name": "parse_search_replace",
@@ -171,8 +177,64 @@
       "uuid"
     ]
   },
+  "tools/repo_index.py": {
+    "summary": "This file builds a 4-level intelligence index for a repository, including semantic search, symbol index, dependency graph, and AST extraction.",
+    "functions": [
+      {
+        "name": "build_symbol_index",
+        "start": 34,
+        "end": 59
+      },
+      {
+        "name": "_extract_raw_imports",
+        "start": 74,
+        "end": 78
+      },
+      {
+        "name": "_module_to_path",
+        "start": 81,
+        "end": 99
+      },
+      {
+        "name": "build_dep_graph",
+        "start": 102,
+        "end": 129
+      },
+      {
+        "name": "build_ast_cache",
+        "start": 136,
+        "end": 167
+      },
+      {
+        "name": "build_full_index",
+        "start": 174,
+        "end": 216
+      },
+      {
+        "name": "get_relevant_context",
+        "start": 219,
+        "end": 258
+      }
+    ],
+    "classes": [],
+    "imports": [
+      "Dict",
+      "Path",
+      "__future__",
+      "agent.logger",
+      "annotations",
+      "extract_symbols",
+      "json",
+      "log",
+      "pathlib",
+      "re",
+      "resolution",
+      "tools.universal_parser",
+      "typing"
+    ]
+  },
   "tools/build_brain.py": {
-    "summary": "This file initializes a repository brain by calling the `build_repo_brain` function from the `tools.repo_brain` module with a specified directory path and an LLM call function from the `agent.llm` module.",
+    "summary": "This file initializes a repository brain by calling a function from another module.",
     "functions": [],
     "classes": [],
     "imports": [
@@ -200,7 +262,7 @@
     ]
   },
   "tools/repo_brain.py": {
-    "summary": "Provides functions build_tree, extract_imports_regex, build_repo_brain and classes .",
+    "summary": "This file is a script that builds a \"repo brain\" for a given repository, which includes a tree of the repository's files, a summary of each file, and information about the functions, classes, and imports in each file.",
     "functions": [
       {
         "name": "build_tree",
@@ -229,8 +291,30 @@
       "tools.universal_parser"
     ]
   },
+  "tools/diff_report.py": {
+    "summary": "This file contains functions to generate a human-readable diff report from JSON data or a repository.",
+    "functions": [
+      {
+        "name": "dump_diff_report_from_json",
+        "start": 5,
+        "end": 28
+      },
+      {
+        "name": "dump_diff_report_from_repo",
+        "start": 29,
+        "end": 31
+      }
+    ],
+    "classes": [],
+    "imports": [
+      "Path",
+      "datetime",
+      "json",
+      "pathlib"
+    ]
+  },
   "tools/code_slice.py": {
-    "summary": "This file defines a function `load_function_slice` that loads and returns the code snippet surrounding a specified function or class within a repository.",
+    "summary": "This file defines a function `load_function_slice` that loads and returns the lines of code surrounding a specified function or class within a repository.",
     "functions": [
       {
         "name": "load_function_slice",
@@ -287,24 +371,56 @@
     ]
   },
   "agent/tool_jail.py": {
-    "summary": "This file defines a function `validate_tool` that checks if a given tool action is allowed for a specific phase (CODER or REVIEWER) and if it includes all required parameters.",
+    "summary": "This file contains a function `validate_tool` that checks if a given action and its payload are allowed based on the current phase (CODER or REVIEWER) and performs additional checks like parameter presence and throttling.",
     "functions": [
       {
         "name": "validate_tool",
-        "start": 21,
-        "end": 33
+        "start": 22,
+        "end": 64
       }
     ],
     "classes": [],
     "imports": []
   },
   "agent/decide.py": {
-    "summary": "This file contains a function `decide_next_action` that generates a prompt for an LLM to decide the next action based on the current state of the system, including the phase, action log, observations, and plan.",
+    "summary": "This file contains functions to verify code changes, including a structural diff verification that uses an LLM to assess whether changes satisfy current milestones.",
     "functions": [
       {
+        "name": "structural_diff_verify",
+        "start": 17,
+        "end": 82
+      },
+      {
+        "name": "_run_validator",
+        "start": 85,
+        "end": 150
+      },
+      {
         "name": "decide_next_action",
-        "start": 7,
-        "end": 103
+        "start": 153,
+        "end": 280
+      }
+    ],
+    "classes": [],
+    "imports": [
+      "Path",
+      "agent.llm",
+      "agent.logger",
+      "call_llm",
+      "difflib",
+      "json",
+      "log",
+      "pathlib",
+      "re"
+    ]
+  },
+  "agent/planner.py": {
+    "summary": "This file contains a function `make_plan` that generates a coding plan based on a given goal and optionally uses a 4-level index for richer context.",
+    "functions": [
+      {
+        "name": "make_plan",
+        "start": 8,
+        "end": 81
       }
     ],
     "classes": [],
@@ -315,27 +431,6 @@
       "json",
       "log",
       "re"
-    ]
-  },
-  "agent/planner.py": {
-    "summary": "This file contains a function `make_plan` that generates a high-level plan for achieving a given goal by breaking it down into logical milestones, using an LLM to process the goal and context from a repository.",
-    "functions": [
-      {
-        "name": "make_plan",
-        "start": 7,
-        "end": 46
-      }
-    ],
-    "classes": [],
-    "imports": [
-      "agent.llm",
-      "agent.logger",
-      "call_llm",
-      "json",
-      "log",
-      "re",
-      "search_repo",
-      "tools.repo_search"
     ]
   },
   "agent/approval.py": {
@@ -352,8 +447,27 @@
       "agent.logger"
     ]
   },
+  "agent/validators.py": {
+    "summary": "This file contains a function `validate_step` that checks if a code change satisfies a given goal, using multiple tiers of validation including custom validators, structural checks, token presence, diff significance, and line count verification.",
+    "functions": [
+      {
+        "name": "validate_step",
+        "start": 8,
+        "end": 107
+      }
+    ],
+    "classes": [],
+    "imports": [
+      "Optional",
+      "Path",
+      "difflib",
+      "pathlib",
+      "re",
+      "typing"
+    ]
+  },
   "agent/logger.py": {
-    "summary": "This file defines a logging system that writes logs to both a file and a user interface, with different formatting for each.",
+    "summary": "This file sets up a logging system that writes logs to both a file and a user interface, with different formatting for each.",
     "functions": [
       {
         "name": "emit",
@@ -380,47 +494,77 @@
     ]
   },
   "agent/loop.py": {
-    "summary": "This file contains functions and logic for managing state, normalizing payloads, resolving repository paths, and determining if an action is a no-op in an agent's loop.",
+    "summary": "This file contains functions and logic for managing an agent's loop, including state management, goal checking, payload normalization, and repository path resolution.",
     "functions": [
       {
         "name": "_ensure_state_fields",
-        "start": 20,
-        "end": 32
+        "start": 27,
+        "end": 41
+      },
+      {
+        "name": "_goal_achieved",
+        "start": 44,
+        "end": 67
       },
       {
         "name": "canonicalize_payload",
-        "start": 34,
-        "end": 38
+        "start": 70,
+        "end": 74
       },
       {
         "name": "normalize_action_payload",
-        "start": 40,
-        "end": 72
+        "start": 77,
+        "end": 99
       },
       {
         "name": "resolve_repo_path",
-        "start": 74,
-        "end": 111
+        "start": 102,
+        "end": 114
       },
       {
         "name": "is_noop_action",
-        "start": 113,
-        "end": 120
+        "start": 117,
+        "end": 124
+      },
+      {
+        "name": "_register_recent_action",
+        "start": 127,
+        "end": 132
+      },
+      {
+        "name": "_detect_alternating_loop",
+        "start": 135,
+        "end": 146
+      },
+      {
+        "name": "_increment_search_count",
+        "start": 149,
+        "end": 156
+      },
+      {
+        "name": "_should_throttle_search",
+        "start": 159,
+        "end": 166
       },
       {
         "name": "_detect_function_from_goal",
-        "start": 124,
-        "end": 131
+        "start": 169,
+        "end": 175
+      },
+      {
+        "name": "_persist_diff_memory",
+        "start": 178,
+        "end": 196
       },
       {
         "name": "_rewrite_function",
-        "start": 133,
-        "end": 250
+        "start": 201,
+        "end": 392
       },
       {
         "name": "run_agent",
-        "start": 253,
-        "end": 555
+        "start": 397,
+        "end": 779
       }
     ],
     "classes": [],
@@ -432,11 +576,16 @@
       "agent.logger",
       "agent.planner",
       "agent.tool_jail",
+      "agent.validators",
       "ask_user_approval",
+      "build_full_index",
       "call_llm",
       "check_syntax",
       "decide_next_action",
+      "difflib",
+      "dump_diff_report_from_json",
       "find_function",
+      "get_relevant_context",
       "json",
       "log",
       "make_plan",
@@ -445,25 +594,35 @@
       "pathlib",
       "re",
       "read_file",
+      "runtime",
       "search_repo",
       "setup_git_env",
+      "state",
       "time",
       "tools.diff_engine",
+      "tools.diff_report",
       "tools.fs_tools",
       "tools.function_locator",
       "tools.git_safety",
+      "tools.repo_index",
       "tools.repo_search",
       "tools.universal_parser",
+      "validate_step",
       "validate_tool"
     ]
   },
   "agent/llm.py": {
-    "summary": "This file contains a function `call_llm` that sends a prompt to a local language model server (llama.cpp/Ollama) and returns the model's response.",
+    "summary": "This file defines functions to interact with a language model server, trimming prompts to fit context limits and handling retries for robust communication.",
     "functions": [
       {
+        "name": "_trim_prompt",
+        "start": 23,
+        "end": 28
+      },
+      {
         "name": "call_llm",
-        "start": 10,
-        "end": 42
+        "start": 31,
+        "end": 82
       }
     ],
     "classes": [],
@@ -471,11 +630,12 @@
       "agent.logger",
       "json",
       "log",
-      "requests"
+      "requests",
+      "time"
     ]
   },
   "agent/repo.py": {
-    "summary": "This file defines a function `build_repo_summary` that takes a repository root directory and an optional maximum number of files to list, then returns a summary of the repository's files, excluding those in the `.git` directory.",
+    "summary": "This file defines a function `build_repo_summary` that generates a summary of files in a given repository, excluding files within the `.git` directory, and limits the output to a specified number of files.",
     "functions": [
       {
         "name": "build_repo_summary",
@@ -490,94 +650,89 @@
     ]
   },
   "tui/app.py": {
-    "summary": "This file defines a Textual User Interface (TUI) for an application called Operon, which allows users to interact with an agent for software engineering tasks, including viewing and approving code changes.",
+    "summary": "This file defines a TUI (Text User Interface) application for an autonomous software engineer (SWE) tool named Operon, which allows users to interact with and manage code changes through a graphical interface.",
     "functions": [
       {
         "name": "__init__",
-        "start": 18,
-        "end": 22
+        "start": 21,
+        "end": 25
       },
       {
         "name": "compose",
-        "start": 24,
-        "end": 30
+        "start": 27,
+        "end": 33
       },
       {
         "name": "on_mount",
-        "start": 32,
-        "end": 40
+        "start": 35,
+        "end": 49
       },
       {
         "name": "on_button_pressed",
-        "start": 42,
-        "end": 47
+        "start": 51,
+        "end": 55
       },
       {
         "name": "compose",
-        "start": 66,
-        "end": 74
+        "start": 77,
+        "end": 89
       },
       {
         "name": "on_mount",
-        "start": 76,
-        "end": 87
+        "start": 93,
+        "end": 104
       },
       {
         "name": "_background_index",
-        "start": 89,
-        "end": 96
+        "start": 106,
+        "end": 127
       },
       {
         "name": "on_key",
-        "start": 99,
-        "end": 107
+        "start": 131,
+        "end": 138
       },
       {
         "name": "on_input_submitted",
-        "start": 109,
-        "end": 122
+        "start": 142,
+        "end": 179
       },
       {
         "name": "execute_agent",
-        "start": 124,
-        "end": 128
+        "start": 183,
+        "end": 201
       },
       {
         "name": "safe_update_log",
-        "start": 130,
-        "end": 131
-      },
-      {
-        "name": "_write_to_log",
-        "start": 133,
-        "end": 134
+        "start": 205,
+        "end": 206
       },
       {
         "name": "safe_show_diff",
-        "start": 136,
-        "end": 137
+        "start": 208,
+        "end": 209
       },
       {
         "name": "_render_approval_ui",
-        "start": 139,
-        "end": 147
+        "start": 211,
+        "end": 216
       },
       {
         "name": "resolve_approval",
-        "start": 149,
-        "end": 163
+        "start": 218,
+        "end": 226
       }
     ],
     "classes": [
       {
         "name": "DiffApproval",
-        "start": 16,
-        "end": 47
+        "start": 18,
+        "end": 55
       },
       {
         "name": "OperonUI",
-        "start": 49,
-        "end": 163
+        "start": 58,
+        "end": 226
       }
     ],
     "imports": [
@@ -589,35 +744,42 @@
       "Key",
       "Panel",
       "Syntax",
-      "Text",
       "agent.logger",
       "agent.loop",
+      "build_full_index",
       "cast",
+      "dump_diff_report_from_repo",
       "index_repo",
       "os",
       "rich.console",
       "rich.panel",
       "rich.syntax",
-      "rich.text",
       "run_agent",
       "runtime.state",
-      "sys",
       "textual.app",
       "textual.containers",
       "textual.events",
       "textual.widgets",
+      "tools.diff_report",
+      "tools.repo_index",
       "tools.semantic_memory",
       "typing"
     ]
   },
+  ".operon/last_session_diff.txt": {
+    "summary": "This file contains a diff report for changes made to the `print.js` file between two specific timestamps.",
+    "functions": [],
+    "classes": [],
+    "imports": []
+  },
   "runtime/state.py": {
-    "summary": "This file defines a data class `AgentState` that represents the state of an agent in a multi-agent system, including its goals, current phase, plan, and various logs and counters.",
+    "summary": "This file defines a dataclass `AgentState` to manage the state of an agent in a multi-agent system, including its goals, current phase, plan, file tracking, action history, counters, memory, and intelligence index.",
     "functions": [],
     "classes": [
       {
         "name": "AgentState",
-        "start": 5,
-        "end": 24
+        "start": 7,
+        "end": 55
       }
     ],
     "imports": [

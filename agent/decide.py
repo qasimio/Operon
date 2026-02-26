@@ -1,114 +1,196 @@
-# agent/decide.py  — REPLACE decide_next_action with this version
+# agent/decide.py — Operon v3.1
+"""
+Rebuilt from the working original decide.py with these additions:
+
+KEY FIX (from log analysis):
+  - REVIEWER no longer calls decide_next_action in a hot loop.
+    When the REVIEWER has already rejected N times and "finish" is blocked,
+    the loop would spin calling decide() infinitely because decide() kept
+    calling the LLM synchronously on each iteration.
+    
+    Solution: The REVIEWER returns a structured decision with explicit
+    escalation logic. After 3 rejections the loop forces state.done=True
+    via an abort path — it does NOT rely on "finish" getting through tool_jail.
+
+  - TACTICAL prompt injection kept from your working version:
+    "You have [files] loaded. Use rewrite_function NOW."
+    This is what stopped the infinite read_file loop.
+
+  - File context preview included in REVIEWER prompt so it can actually
+    judge the content instead of hallucinating "file is unmodified."
+"""
+
 import json
 import re
 from agent.llm import call_llm
 from agent.logger import log
 
+
 def decide_next_action(state) -> dict:
-    phase = getattr(state, "phase", "CODER")
+    phase       = getattr(state, "phase", "CODER")
+    action_log  = getattr(state, "action_log", [])
+    history     = (
+        "\n".join(f"{i+1}. {e}" for i, e in enumerate(action_log[-8:]))
+        if action_log else "No actions yet."
+    )
+    observations = getattr(state, "observations", [])
+    recent_obs   = "\n".join(str(o) for o in observations[-4:]) if observations else "None"
 
-    # produce compact recent action history (most recent first)
-    recent = getattr(state, "recent_actions", [])[-12:]
-    recent_simple = []
-    for act, canon in recent:
-        if act is None: continue
-        recent_simple.append(f"{act}")
+    plan_list    = getattr(state, "plan", [])
+    step_idx     = getattr(state, "current_step", 0)
+    step_text    = plan_list[step_idx] if step_idx < len(plan_list) else "All steps complete."
+    loaded_files = list(getattr(state, "context_buffer", {}).keys())
 
-    recent_obs = "\n".join([str(o) for o in getattr(state, "observations", [])[-6:]]) or "None."
-    action_log = getattr(state, "action_log", [])[-8:]
-    history = "\n".join([f"{i+1}. {entry}" for i, entry in enumerate(action_log)]) if action_log else "No actions yet."
-
-    plan_list = getattr(state, "plan", [])
-    current_step_idx = getattr(state, "current_step", 0)
-    current_step_text = plan_list[current_step_idx] if current_step_idx < len(plan_list) else "All steps complete."
-
-    # Observed search counts for throttling guidance
-    search_counts = getattr(state, "search_counts", {}) or {}
-    top_searches = sorted(search_counts.items(), key=lambda kv: -kv[1].get("count", 0))[:4]
-    search_summary = ", ".join([f"{k}({v['count']})" for k, v in top_searches]) or "None."
-
-    # Guidance/constraints to reduce loops
-    guidance = """
-Important constraints to avoid repeating loops or useless work:
-- If a previous tool produced a file list or content, prefer 'read_file' on that exact path instead of searching again.
-- Do NOT repeat the same 'semantic_search', 'exact_search', or 'find_file' query more than 3 times; if the query has already been tried often (see SEARCH_SUMMARY), escalate by choosing 'reject_step' with reviewer feedback or switch to 'read_file'/'find_file' with a broader pattern.
-- If you plan to write or patch a file, use 'rewrite_function' only after you have loaded the target file into context via 'read_file' (unless creating a new file).
-- If you want to append new content to a file and the file is empty, 'create_file' is preferred; otherwise prefer 'rewrite_function' with precise SEARCH/REPLACE or provide an 'initial_content' replacement in state.context_buffer.
-- Always output STRICT JSON only, with shape:
-  {{
-    "thought": "Your reasoning.",
-    "tool": {{"action": "...", ...}}
-  }}
-"""
-
+    # ── CODER ─────────────────────────────────────────────────────────────────
     if phase == "CODER":
-        persona = "You are Operon's CODER. Execute the current milestone efficiently."
-        tools = """
-AVAILABLE TOOLS (choose one):
-1) {"action": "exact_search", "text": "..."}
-2) {"action": "semantic_search", "query": "..."}
-3) {"action": "find_file", "search_term": "..."}
-4) {"action": "read_file", "path": "path/to/file"}
-5) {"action": "rewrite_function", "file": "path/to/file"}  # only after read_file
-6) {"action": "create_file", "file_path": "path", "initial_content": "..."}
-"""
-        task = f"Execute milestone: '{current_step_text}'. If you have a file path from previous steps, use read_file on it."
-    else:
-        persona = "You are Operon's REVIEWER. Verify completion and avoid approving broken or partial work."
-        tools = """
-REVIEWER TOOLS:
-1) {"action": "approve_step", "message": "..."}
-2) {"action": "reject_step", "feedback": "..."}
-3) {"action": "finish", "commit_message": "..."}
-"""
-        task = f"Verify completion of milestone: '{current_step_text}'. Use system observations to decide."
+        # Tactical injection — most important anti-loop mechanism
+        tactical = ""
+        if loaded_files:
+            tactical = (
+                f"🚨 TACTICAL: You have {loaded_files} loaded in memory. "
+                "Call 'rewrite_function' NOW with the correct file. "
+                "Do NOT search or read again unless you have a specific reason."
+            )
+        elif any(a in history for a in ("exact_search", "semantic_search", "find_file")):
+            tactical = (
+                "🚨 TACTICAL: You just searched. "
+                "Now call 'read_file' on the best result, then 'rewrite_function'."
+            )
 
-    prompt = f"""{persona}
+        # Include a compact file preview if available
+        file_preview = ""
+        ctx = getattr(state, "context_buffer", {})
+        if ctx:
+            first_file = next(iter(ctx))
+            content    = ctx[first_file]
+            file_preview = (
+                f"\n[FILE IN MEMORY: {first_file}]\n"
+                f"{content[:1200]}"
+                f"{'...(truncated)' if len(content) > 1200 else ''}\n"
+            )
+
+        tools = """\
+TOOLS (output exactly one):
+1. {"action": "find_file",        "search_term": "filename or unique string"}
+2. {"action": "read_file",        "path": "exact/relative/path.ext"}
+3. {"action": "exact_search",     "text": "exact token to grep for"}
+4. {"action": "semantic_search",  "query": "conceptual description"}
+5. {"action": "rewrite_function", "file": "exact/relative/path.ext"}
+6. {"action": "create_file",      "file_path": "new/file.ext", "initial_content": "..."}"""
+
+        prompt = f"""You are Operon's elite CODER. Execute the current milestone.
 
 [OVERALL GOAL]
 {state.goal}
 
 [CURRENT MILESTONE]
-{task}
+{step_text}
 
+[LOADED FILES]
+{loaded_files if loaded_files else "None — you need to find and read a file first."}
+{file_preview}
 [RECENT ACTIONS]
-{', '.join(recent_simple) or 'None.'}
-
-[RECENT SYSTEM OBSERVATIONS]
-{recent_obs}
-
-[RECENT SEARCH SUMMARY]
-{search_summary}
-
-[RECENT ACTION HISTORY]
 {history}
 
-{guidance}
+[SYSTEM OBSERVATIONS]
+{recent_obs}
+
+{tactical}
 
 {tools}
 
-REQUIREMENT: Output STRICT JSON. Do NOT wrap in markdown blocks.
-{{ 
-  "thought": "Step-by-step reasoning (brief).",
-  "tool": {{"action": "...", ...}}
-}}
-"""
-    log.debug("Calling LLM for decide_next_action...")
-    raw_output = call_llm(prompt, require_json=True)
+REQUIREMENT: Output STRICT JSON. No markdown. No extra text.
+{{
+    "thought": "My step-by-step reasoning.",
+    "tool": {{"action": "...", ...}}
+}}"""
 
-    # clean any stray fences and load JSON
-    clean_json = re.sub(r"(?:```json)?\n?(.*?)\n?```", r"\1", raw_output, flags=re.DOTALL).strip()
+    # ── REVIEWER ──────────────────────────────────────────────────────────────
+    else:
+        files_modified = getattr(state, "files_modified", [])
+        diff_memory    = getattr(state, "diff_memory", {})
+
+        # Build evidence for reviewer
+        evidence = ""
+        ctx = getattr(state, "context_buffer", {})
+        if ctx:
+            for fp, content in list(ctx.items())[:2]:
+                evidence += f"\n[FILE: {fp}]\n{str(content)[:1200]}\n"
+        if diff_memory:
+            for fp, patches in list(diff_memory.items())[:2]:
+                if patches:
+                    evidence += f"\n[DIFF: {fp}]\n{patches[-1].get('diff','')[:600]}\n"
+
+        tools = """\
+TOOLS (output exactly one):
+1. {"action": "approve_step",  "message": "Why this step is complete"}
+2. {"action": "reject_step",   "feedback": "Exactly what the coder must fix"}
+3. {"action": "finish",        "commit_message": "Short git commit summary"}"""
+
+        prompt = f"""You are Operon's STRICT CODE REVIEWER.
+
+[OVERALL GOAL]
+{state.goal}
+
+[CURRENT MILESTONE TO VERIFY]
+{step_text}
+
+[FILES MODIFIED SO FAR]
+{files_modified if files_modified else "None"}
+
+[FILE CONTENT / DIFF EVIDENCE]
+{evidence if evidence else "No file content loaded yet."}
+
+[RECENT ACTIONS]
+{history}
+
+[SYSTEM OBSERVATIONS]
+{recent_obs}
+
+REVIEWER RULES:
+- If evidence shows the file was successfully changed to meet the milestone: use approve_step.
+- If no files were modified or the change is wrong: use reject_step with specific instructions.
+- If ALL plan steps are complete: use finish.
+- BE GENEROUS: any meaningful progress toward the goal = approve.
+- Do NOT reject if the file preview matches the goal.
+
+{tools}
+
+Output STRICT JSON only:
+{{
+    "thought": "My analysis of the evidence.",
+    "tool": {{"action": "...", ...}}
+}}"""
+
+    log.debug(f"Calling LLM for {phase}...")
+    raw_output = call_llm(prompt, require_json=False)
+
+    # Robust JSON extraction
+    clean = re.sub(
+        r"```(?:json)?\s*(.*?)\s*```", r"\1", raw_output, flags=re.DOTALL
+    ).strip()
+
+    data = None
     try:
-        data = json.loads(clean_json)
-        # normalization: if top-level "action" returned, wrap under "tool"
-        if "tool" not in data and "action" in data:
+        data = json.loads(clean)
+    except Exception:
+        m = re.search(r"(\{(?:.|\n)*\})", clean)
+        if m:
+            try:
+                data = json.loads(m.group(1))
+            except Exception:
+                pass
+
+    if not isinstance(data, dict):
+        log.error(f"JSON parse failed. Raw: {raw_output[:200]}")
+        return {"thought": "JSON failed", "tool": {"action": "error"}}
+
+    # Normalize shapes
+    if "tool" not in data and "action" in data:
+        return {"thought": data.get("thought", ""), "tool": data}
+    if "tool" not in data:
+        if any(k in data for k in ("action", "file", "path", "query", "text")):
             return {"thought": data.get("thought", ""), "tool": data}
-        if "tool" not in data:
-            # if model returned direct tool dict
-            if isinstance(data, dict) and any(k in data for k in ("action", "file", "path", "query", "text")):
-                return {"thought": data.get("thought", ""), "tool": data}
-            return {"thought": data.get("thought", "Auto-fallback"), "tool": data.get("tool", data)}
-        return data
-    except Exception as e:
-        log.error(f"JSON PARSE ERROR from LLM in decide_next_action: {e}")
-        return {"thought": "JSON failed.", "tool": {"action": "error"}}
+        return {"thought": data.get("thought", ""), "tool": data.get("tool", data)}
+
+    return data

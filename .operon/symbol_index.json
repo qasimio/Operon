@@ -1,0 +1,527 @@
+{
+  "main.py": {
+    "functions": [],
+    "classes": []
+  },
+  "requirements.txt": {
+    "functions": [],
+    "classes": []
+  },
+  "print.js": {
+    "functions": [],
+    "classes": []
+  },
+  "readme.md": {
+    "functions": [],
+    "classes": []
+  },
+  "repo_tree.json": {
+    "functions": [],
+    "classes": []
+  },
+  "repo_files.json": {
+    "functions": [],
+    "classes": []
+  },
+  "tools/function_locator.py": {
+    "functions": [
+      {
+        "name": "find_function",
+        "start": 5,
+        "end": 39
+      }
+    ],
+    "classes": []
+  },
+  "tools/universal_parser.py": {
+    "functions": [
+      {
+        "name": "get_parser",
+        "start": 18,
+        "end": 25
+      },
+      {
+        "name": "check_syntax",
+        "start": 28,
+        "end": 35
+      },
+      {
+        "name": "extract_symbols",
+        "start": 38,
+        "end": 97
+      },
+      {
+        "name": "get_node_name",
+        "start": 65,
+        "end": 76
+      },
+      {
+        "name": "walk",
+        "start": 78,
+        "end": 94
+      }
+    ],
+    "classes": []
+  },
+  "tools/fs_tools.py": {
+    "functions": [
+      {
+        "name": "read_file",
+        "start": 4,
+        "end": 10
+      },
+      {
+        "name": "write_file",
+        "start": 12,
+        "end": 38
+      }
+    ],
+    "classes": []
+  },
+  "tools/diff_engine.py": {
+    "functions": [
+      {
+        "name": "parse_search_replace",
+        "start": 3,
+        "end": 10
+      },
+      {
+        "name": "_normalize_lines",
+        "start": 12,
+        "end": 14
+      },
+      {
+        "name": "apply_patch",
+        "start": 16,
+        "end": 78
+      }
+    ],
+    "classes": []
+  },
+  "tools/git_safety.py": {
+    "functions": [
+      {
+        "name": "run_git",
+        "start": 6,
+        "end": 12
+      },
+      {
+        "name": "setup_git_env",
+        "start": 14,
+        "end": 38
+      },
+      {
+        "name": "rollback_macro",
+        "start": 40,
+        "end": 58
+      },
+      {
+        "name": "commit_success",
+        "start": 60,
+        "end": 75
+      }
+    ],
+    "classes": []
+  },
+  "tools/repo_index.py": {
+    "functions": [
+      {
+        "name": "build_symbol_index",
+        "start": 34,
+        "end": 59
+      },
+      {
+        "name": "_extract_raw_imports",
+        "start": 74,
+        "end": 78
+      },
+      {
+        "name": "_module_to_path",
+        "start": 81,
+        "end": 99
+      },
+      {
+        "name": "build_dep_graph",
+        "start": 102,
+        "end": 129
+      },
+      {
+        "name": "build_ast_cache",
+        "start": 136,
+        "end": 167
+      },
+      {
+        "name": "build_full_index",
+        "start": 174,
+        "end": 216
+      },
+      {
+        "name": "get_relevant_context",
+        "start": 219,
+        "end": 258
+      }
+    ],
+    "classes": []
+  },
+  "tools/build_brain.py": {
+    "functions": [],
+    "classes": []
+  },
+  "tools/repo_search.py": {
+    "functions": [
+      {
+        "name": "search_repo",
+        "start": 5,
+        "end": 12
+      }
+    ],
+    "classes": []
+  },
+  "tools/repo_brain.py": {
+    "functions": [
+      {
+        "name": "build_tree",
+        "start": 12,
+        "end": 21
+      },
+      {
+        "name": "extract_imports_regex",
+        "start": 24,
+        "end": 34
+      },
+      {
+        "name": "build_repo_brain",
+        "start": 37,
+        "end": 116
+      }
+    ],
+    "classes": []
+  },
+  "tools/diff_report.py": {
+    "functions": [
+      {
+        "name": "dump_diff_report_from_json",
+        "start": 5,
+        "end": 28
+      },
+      {
+        "name": "dump_diff_report_from_repo",
+        "start": 29,
+        "end": 31
+      }
+    ],
+    "classes": []
+  },
+  "tools/code_slice.py": {
+    "functions": [
+      {
+        "name": "load_function_slice",
+        "start": 5,
+        "end": 47
+      }
+    ],
+    "classes": []
+  },
+  "tools/semantic_memory.py": {
+    "functions": [
+      {
+        "name": "get_db_path",
+        "start": 14,
+        "end": 17
+      },
+      {
+        "name": "_hash_file",
+        "start": 19,
+        "end": 23
+      },
+      {
+        "name": "index_repo",
+        "start": 25,
+        "end": 91
+      },
+      {
+        "name": "search_memory",
+        "start": 93,
+        "end": 113
+      }
+    ],
+    "classes": []
+  },
+  "agent/tool_jail.py": {
+    "functions": [
+      {
+        "name": "validate_tool",
+        "start": 22,
+        "end": 64
+      }
+    ],
+    "classes": []
+  },
+  "agent/decide.py": {
+    "functions": [
+      {
+        "name": "structural_diff_verify",
+        "start": 17,
+        "end": 82
+      },
+      {
+        "name": "_run_validator",
+        "start": 85,
+        "end": 150
+      },
+      {
+        "name": "decide_next_action",
+        "start": 153,
+        "end": 281
+      }
+    ],
+    "classes": []
+  },
+  "agent/planner.py": {
+    "functions": [
+      {
+        "name": "make_plan",
+        "start": 8,
+        "end": 81
+      }
+    ],
+    "classes": []
+  },
+  "agent/approval.py": {
+    "functions": [
+      {
+        "name": "ask_user_approval",
+        "start": 3,
+        "end": 28
+      }
+    ],
+    "classes": []
+  },
+  "agent/validators.py": {
+    "functions": [
+      {
+        "name": "validate_step",
+        "start": 8,
+        "end": 107
+      }
+    ],
+    "classes": []
+  },
+  "agent/logger.py": {
+    "functions": [
+      {
+        "name": "emit",
+        "start": 11,
+        "end": 16
+      },
+      {
+        "name": "setup_logger",
+        "start": 18,
+        "end": 34
+      }
+    ],
+    "classes": [
+      {
+        "name": "TUILogHandler",
+        "start": 10,
+        "end": 16
+      }
+    ]
+  },
+  "agent/loop.py": {
+    "functions": [
+      {
+        "name": "_ensure_state_fields",
+        "start": 27,
+        "end": 42
+      },
+      {
+        "name": "_goal_achieved",
+        "start": 45,
+        "end": 68
+      },
+      {
+        "name": "canonicalize_payload",
+        "start": 71,
+        "end": 75
+      },
+      {
+        "name": "normalize_action_payload",
+        "start": 78,
+        "end": 100
+      },
+      {
+        "name": "resolve_repo_path",
+        "start": 103,
+        "end": 115
+      },
+      {
+        "name": "is_noop_action",
+        "start": 118,
+        "end": 125
+      },
+      {
+        "name": "_register_recent_action",
+        "start": 128,
+        "end": 133
+      },
+      {
+        "name": "_detect_alternating_loop",
+        "start": 136,
+        "end": 147
+      },
+      {
+        "name": "_increment_search_count",
+        "start": 150,
+        "end": 157
+      },
+      {
+        "name": "_should_throttle_search",
+        "start": 160,
+        "end": 167
+      },
+      {
+        "name": "_detect_function_from_goal",
+        "start": 170,
+        "end": 176
+      },
+      {
+        "name": "_persist_diff_memory",
+        "start": 179,
+        "end": 197
+      },
+      {
+        "name": "_rewrite_function",
+        "start": 201,
+        "end": 370
+      },
+      {
+        "name": "run_agent",
+        "start": 375,
+        "end": 781
+      }
+    ],
+    "classes": []
+  },
+  "agent/llm.py": {
+    "functions": [
+      {
+        "name": "_trim_prompt",
+        "start": 23,
+        "end": 28
+      },
+      {
+        "name": "call_llm",
+        "start": 31,
+        "end": 82
+      }
+    ],
+    "classes": []
+  },
+  "agent/repo.py": {
+    "functions": [
+      {
+        "name": "build_repo_summary",
+        "start": 3,
+        "end": 16
+      }
+    ],
+    "classes": []
+  },
+  "tui/app.py": {
+    "functions": [
+      {
+        "name": "__init__",
+        "start": 21,
+        "end": 25
+      },
+      {
+        "name": "compose",
+        "start": 27,
+        "end": 33
+      },
+      {
+        "name": "on_mount",
+        "start": 35,
+        "end": 49
+      },
+      {
+        "name": "on_button_pressed",
+        "start": 51,
+        "end": 55
+      },
+      {
+        "name": "compose",
+        "start": 77,
+        "end": 89
+      },
+      {
+        "name": "on_mount",
+        "start": 93,
+        "end": 104
+      },
+      {
+        "name": "_background_index",
+        "start": 106,
+        "end": 127
+      },
+      {
+        "name": "on_key",
+        "start": 131,
+        "end": 138
+      },
+      {
+        "name": "on_input_submitted",
+        "start": 142,
+        "end": 179
+      },
+      {
+        "name": "execute_agent",
+        "start": 183,
+        "end": 201
+      },
+      {
+        "name": "safe_update_log",
+        "start": 205,
+        "end": 206
+      },
+      {
+        "name": "safe_show_diff",
+        "start": 208,
+        "end": 209
+      },
+      {
+        "name": "_render_approval_ui",
+        "start": 211,
+        "end": 216
+      },
+      {
+        "name": "resolve_approval",
+        "start": 218,
+        "end": 226
+      }
+    ],
+    "classes": [
+      {
+        "name": "DiffApproval",
+        "start": 18,
+        "end": 55
+      },
+      {
+        "name": "OperonUI",
+        "start": 58,
+        "end": 226
+      }
+    ]
+  },
+  "runtime/state.py": {
+    "functions": [],
+    "classes": [
+      {
+        "name": "AgentState",
+        "start": 7,
+        "end": 55
+      }
+    ]
+  }
+}
