@@ -302,7 +302,10 @@ CURRENT FILE:
             candidate = str(candidate)
 
     if not blocks and (not candidate or candidate.strip() == file_text.strip()):
-        return {"success": True, "file": file_path, "message": "No changes proposed by LLM."}
+        return {
+        "success": False,
+        "error": "LLM produced no SEARCH/REPLACE blocks and no alternative content. No changes proposed."
+    }
 
     # ── Dry-run all patches ───────────────────────────────────────────────────
     preview_text = file_text
@@ -362,8 +365,11 @@ CURRENT FILE:
             preview_patches.append({"search": file_text[:200].strip(), "replace": preview_text[:200].strip()})
             applied_any = True
 
-    if not applied_any:
-        return {"success": True, "file": file_path, "message": "No effective changes (dry-run)."}
+    if not blocks and (not candidate or candidate.strip() == file_text.strip()):
+        return {
+        "success": False,
+        "error": "LLM produced no SEARCH/REPLACE blocks and no alternative content. No changes proposed."
+    }
 
     # ── Build approval payload ────────────────────────────────────────────────
     joined_search = "\n\n---\n\n".join(p["search"] for p in preview_patches if p.get("search") is not None)
@@ -684,6 +690,12 @@ def run_agent(state):
                         lineterm=""
                     ))
                     diff_text = "\n".join(diff_lines)
+                    
+                    if not diff_text.strip():
+                        log.warning("Rewrite resulted in empty diff. Treating as failure.")
+                        state.observations.append({"error": "Rewrite produced no changes."})
+                        state.phase = "CODER"
+                        continue
 
                     # Store full diff in memory (critical for REVIEWER's LLM verifier)
                     state.diff_memory.setdefault(target_file, []).append({
@@ -719,7 +731,8 @@ def run_agent(state):
                         "file_preview": after_text[:2000],
                         "diff_preview": diff_text[:3000],
                     })
-                    if target_file not in state.files_modified:
+
+                    if diff_text.strip() and target_file not in state.files_modified:
                         state.files_modified.append(target_file)
 
                 else:
