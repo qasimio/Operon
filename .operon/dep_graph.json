@@ -1,0 +1,69 @@
+{
+  "main.py": [
+    "tui/app.py"
+  ],
+  "tools/git_safety.py": [
+    "agent/logger.py"
+  ],
+  "tools/repo_index.py": [
+    "agent/logger.py",
+    "tools/universal_parser.py"
+  ],
+  "tools/build_brain.py": [
+    "agent/llm.py",
+    "tools/repo_brain.py"
+  ],
+  "tools/repo_search.py": [
+    "agent/logger.py",
+    "tools/semantic_memory.py"
+  ],
+  "tools/repo_brain.py": [
+    "tools/universal_parser.py"
+  ],
+  "tools/code_slice.py": [
+    "tools/function_locator.py"
+  ],
+  "tools/semantic_memory.py": [
+    "agent/logger.py",
+    "tools/universal_parser.py"
+  ],
+  "agent/decide.py": [
+    "agent/llm.py",
+    "agent/logger.py"
+  ],
+  "agent/planner.py": [
+    "agent/llm.py",
+    "agent/logger.py"
+  ],
+  "agent/approval.py": [
+    "agent/logger.py"
+  ],
+  "agent/loop.py": [
+    "agent/approval.py",
+    "agent/decide.py",
+    "agent/llm.py",
+    "agent/logger.py",
+    "agent/planner.py",
+    "agent/tool_jail.py",
+    "agent/validators.py",
+    "tools/diff_engine.py",
+    "tools/diff_report.py",
+    "tools/fs_tools.py",
+    "tools/function_locator.py",
+    "tools/git_safety.py",
+    "tools/repo_index.py",
+    "tools/repo_search.py",
+    "tools/universal_parser.py"
+  ],
+  "agent/llm.py": [
+    "agent/logger.py"
+  ],
+  "tui/app.py": [
+    "agent/logger.py",
+    "agent/loop.py",
+    "runtime/state.py",
+    "tools/diff_report.py",
+    "tools/repo_index.py",
+    "tools/semantic_memory.py"
+  ]
+}

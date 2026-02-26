@@ -1,0 +1,10 @@
+{
+  "main.py": [
+    {
+      "ts": 1772109091.855785,
+      "before": "# main.py\nimport sys\nfrom tui.app import OperonUI\n\nif __name__ == \"__main__\":\n    try:\n        app = OperonUI()\n        app.run()\n    except KeyboardInterrupt:\n        print(\"\\nOperon shut down safely.\")\n        sys.exit(0)",
+      "after": "# main.py\nimport sys\nfrom tui.app import OperonUI\n\nif __name__ == \"__main__\":\n    try:\n        app = OperonUI()\n        app.run()\n    except KeyboardInterrupt:\n        print(\"\\nOperon shut down safely.\")\n        sys.exit(0)",
+      "diff": ""
+    }
+  ]
+}
