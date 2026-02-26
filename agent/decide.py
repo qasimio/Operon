@@ -1,292 +1,308 @@
-# agent/decide.py — Operon v2: Smarter REVIEWER that actually understands diffs
+# agent/decide.py — Operon v3
+"""
+CORE FIX for the reviewer loop bug.
+
+Old behaviour: REVIEWER ran simplistic string checks → false negatives → infinite loops.
+
+New behaviour (3-tier verification):
+  Tier 1 — Fast: has ANY file actually been modified (diff_memory check)?
+  Tier 2 — Structural: plan-declared validators (not_contains / contains / lines_removed)
+  Tier 3 — LLM diff review: pass the REAL unified diff to the LLM and ask
+            "does this change satisfy the milestone?" — the LLM has actual evidence.
+
+Additionally: REVIEWER only calls reject_step when it has a concrete reason.
+After 3 rejections it calls finish (abort) instead of looping forever.
+"""
+
 import json
 import re
-import difflib
 from pathlib import Path
 from agent.llm import call_llm
 from agent.logger import log
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# CORE FIX: The "Big Bug" — REVIEWER couldn't tell if the change was correct.
-# Solution: structural_diff_verify() — reads the ACTUAL file on disk, computes
-# a real unified diff vs. what was there before, and passes BOTH to the LLM
-# Reviewer along with the goal, so the LLM can make a grounded judgment.
-# ─────────────────────────────────────────────────────────────────────────────
+# ── Tier 3: LLM diff verification ────────────────────────────────────────────
 
-def structural_diff_verify(state, step_idx: int) -> tuple[bool, str]:
+def _llm_verify_diff(state, step_text: str) -> tuple[bool | None, str]:
     """
-    Level-4 verifier: uses the stored before/after diff from diff_memory to
-    ask the LLM whether the change actually satisfies the current milestone.
-
-    This is the primary fix for the reviewer loop bug — instead of the
-    reviewer blindly calling reject because a simple string check failed,
-    it now reads the REAL diff and reasons about it.
+    Returns (True=pass, False=fail, None=inconclusive), reason string.
+    Passes the real diff to the LLM so it can make a grounded judgment.
     """
-    plan_list = getattr(state, "plan", [])
-    step_text = plan_list[step_idx] if step_idx < len(plan_list) else state.goal
-
     diff_memory = getattr(state, "diff_memory", {})
     if not diff_memory:
-        return False, "No diff memory found — coder has not written any files yet."
+        return None, "No diff recorded yet."
 
-    # Collect the most recent patch across all modified files
-    all_patches = []
-    for file_path, patches in diff_memory.items():
-        if patches:
-            latest = patches[-1]
-            all_patches.append((file_path, latest.get("diff", ""), latest.get("after", "")))
+    # Collect the most recent patch for each modified file (max 3 files)
+    snippets: list[str] = []
+    for file_path, patches in list(diff_memory.items())[:3]:
+        if not patches:
+            continue
+        latest = patches[-1]
+        diff   = (latest.get("diff", "") or "")[:1200]
+        after  = (latest.get("after", "") or "")[:600]
+        snippets.append(f"FILE: {file_path}\n--- DIFF ---\n{diff}\n--- RESULT ---\n{after}")
 
-    if not all_patches:
-        return False, "Diff memory entries are empty."
+    if not snippets:
+        return None, "Diff memory empty."
 
-    # Build a compact summary for the LLM (keep context window small for Qwen 7B)
-    diff_summary_parts = []
-    for fp, diff_text, after_text in all_patches[:3]:   # max 3 files
-        diff_preview = diff_text[:1500] if diff_text else "(no diff)"
-        after_preview = after_text[:800] if after_text else "(empty)"
-        diff_summary_parts.append(
-            f"FILE: {fp}\n--- DIFF ---\n{diff_preview}\n--- FILE AFTER ---\n{after_preview}"
-        )
+    combined = "\n\n".join(snippets)
 
-    combined = "\n\n".join(diff_summary_parts)
+    prompt = f"""You are Operon's REVIEWER. Check whether the code change satisfies the milestone.
 
-    prompt = f"""You are Operon's REVIEWER. Your job is to verify whether a code change satisfies a milestone.
+OVERALL GOAL: {state.goal}
+MILESTONE:    {step_text}
 
-GOAL (overall): {state.goal}
-CURRENT MILESTONE: {step_text}
-
-CHANGES MADE (unified diff + resulting file):
+CHANGES MADE:
 {combined}
 
-QUESTION: Does the change above correctly satisfy the milestone "{step_text}"?
+Does the change above correctly satisfy the milestone?
+Be GENEROUS: if the change makes meaningful progress toward the milestone, answer PASS.
+Only answer FAIL if the change is clearly wrong or the file is unmodified.
 
-Answer with STRICT JSON:
-{{"verdict": "PASS" or "FAIL", "reason": "one sentence explanation"}}
-
-Be generous: if the change is approximately correct and moves toward the goal, answer PASS.
-Only answer FAIL if the change is clearly wrong, missing, or makes things worse.
+Respond with STRICT JSON only:
+{{"verdict": "PASS", "reason": "one sentence"}}
+or
+{{"verdict": "FAIL", "reason": "one sentence explaining what is wrong"}}
 """
     try:
         raw = call_llm(prompt, require_json=True)
-        clean = re.sub(r"```(?:json)?\s*|\s*```", "", raw.strip(), flags=re.DOTALL).strip()
-        data = json.loads(clean)
-        verdict = str(data.get("verdict", "")).upper()
-        reason = data.get("reason", "")
+        data = json.loads(raw)
+        verdict = str(data.get("verdict", "")).upper().strip()
+        reason  = str(data.get("reason", ""))
         if verdict == "PASS":
             return True, reason
-        return False, reason
+        if verdict == "FAIL":
+            return False, reason
     except Exception as e:
-        log.debug(f"structural_diff_verify LLM parse error: {e}")
-        # If LLM fails to respond sensibly, fall through to heuristic
-        return False, f"LLM verify failed: {e}"
+        log.debug(f"LLM diff verify parse error: {e}")
+    return None, "LLM verdict unclear."
 
 
-def _run_validator(state, step_idx: int) -> tuple[bool, str]:
+# ── Tier 2: plan-declared validators ─────────────────────────────────────────
+
+def _run_declared_validator(state, step_idx: int) -> tuple[bool | None, str]:
     """
-    Three-tier validator:
-      Tier 1 — Heuristic structural checks (fast, no LLM)
-      Tier 2 — Plan-level declared validators (not_contains / contains / lines_removed)
-      Tier 3 — LLM structural diff review (the big-bug fix)
+    Returns (True/False/None, message).
+    None = validator not declared or inconclusive (fall through to Tier 3).
     """
-    # ── Tier 1: Has coder actually modified any files? ───────────────────────
-    diff_memory = getattr(state, "diff_memory", {})
-    files_modified = getattr(state, "files_modified", [])
-
-    if not files_modified and not diff_memory:
-        return False, "Coder has not modified any files yet. Cannot approve."
-
-    # ── Tier 2: Declared per-step validators ────────────────────────────────
     validators = getattr(state, "plan_validators", None)
-    if validators and step_idx < len(validators):
-        v = validators[step_idx]
-        if v:
-            vtype = v.get("type")
-            try:
-                if vtype == "not_contains":
-                    p = Path(state.repo_root) / v["file"]
-                    contents = p.read_text(encoding="utf-8") if p.exists() else ""
-                    if v["text"] in contents:
-                        # Don't immediately reject — first check if diff shows removal
-                        pass   # fall through to Tier 3
-                    else:
-                        return True, f"'{v['text'][:40]}' correctly absent from {v['file']}."
+    if not validators or step_idx >= len(validators):
+        return None, "No declared validator."
 
-                elif vtype == "contains":
-                    p = Path(state.repo_root) / v["file"]
-                    contents = p.read_text(encoding="utf-8") if p.exists() else ""
-                    if v["text"] in contents:
-                        return True, f"Required text found in {v['file']}."
-                    # Fall through to Tier 3 instead of hard-failing
+    v = validators[step_idx]
+    if not v:
+        return None, "Validator is null."
 
-                elif vtype == "lines_removed":
-                    file = v["file"]
-                    start = int(v.get("start", 0))
-                    end = int(v.get("end", 0))
-                    p = Path(state.repo_root) / file
-                    if p.exists():
-                        lines = p.read_text(encoding="utf-8").splitlines()
-                        found_any = any(
-                            f"console.log({i});" in lines or f"print({i})" in lines
-                            for i in range(start, end + 1)
-                        )
-                        if not found_any:
-                            return True, f"Lines {start}-{end} successfully removed from {file}."
-                    # Fall through to Tier 3
+    vtype = v.get("type")
+    try:
+        if vtype == "not_contains":
+            p = Path(state.repo_root) / v["file"]
+            content = p.read_text(encoding="utf-8") if p.exists() else ""
+            if v["text"] in content:
+                return None, f"Token still present — passing to LLM verify."  # don't hard-fail; let Tier 3 decide
+            return True, f"'{v['text'][:40]}' correctly absent from {v['file']}."
 
-            except Exception as e:
-                log.debug(f"Tier-2 validator error: {e}")
+        if vtype == "contains":
+            p = Path(state.repo_root) / v["file"]
+            content = p.read_text(encoding="utf-8") if p.exists() else ""
+            if v["text"] in content:
+                return True, f"Required token found in {v['file']}."
+            return None, "Required token missing — passing to LLM verify."
 
-    # ── Tier 3: LLM diff verification (the core bug fix) ────────────────────
-    verdict, reason = structural_diff_verify(state, step_idx)
-    if verdict is True:
-        return True, f"LLM Reviewer verified: {reason}"
-    if verdict is False:
-        return False, f"LLM Reviewer rejected: {reason}"
+        if vtype == "lines_removed":
+            p = Path(state.repo_root) / v["file"]
+            if not p.exists():
+                return None, f"File {v['file']} does not exist."
+            lines   = p.read_text(encoding="utf-8").splitlines()
+            start   = int(v.get("start", 0))
+            end     = int(v.get("end", 0))
+            # Accept if file is shorter than expected end (lines definitely gone)
+            if len(lines) < end:
+                return True, f"File now shorter than line {end} — lines removed."
+            return None, "Line count ambiguous — passing to LLM verify."
 
-    # Tier 3 inconclusive → fall back to: "files were modified" = optimistic pass
+    except Exception as e:
+        log.debug(f"Declared validator error: {e}")
+        return None, f"Validator error: {e}"
+
+    return None, "Unknown validator type."
+
+
+# ── Main 3-tier check ─────────────────────────────────────────────────────────
+
+def run_reviewer_check(state, step_idx: int) -> tuple[bool, str]:
+    """
+    Returns (passed: bool, message: str).
+    """
+    plan_list     = getattr(state, "plan", [])
+    step_text     = plan_list[step_idx] if step_idx < len(plan_list) else state.goal
+    files_modified = getattr(state, "files_modified", [])
+    diff_memory    = getattr(state, "diff_memory", {})
+
+    # ── Tier 1: Has the coder modified ANYTHING? ──────────────────────────────
+    if not files_modified and not diff_memory:
+        return False, "Coder has not modified any files yet."
+
+    # ── Tier 2: Declared validator ────────────────────────────────────────────
+    t2_result, t2_msg = _run_declared_validator(state, step_idx)
+    if t2_result is True:
+        return True, f"[T2] {t2_msg}"
+    if t2_result is False:
+        return False, f"[T2] {t2_msg}"
+    # None → fall through
+
+    # ── Tier 3: LLM diff review ───────────────────────────────────────────────
+    t3_result, t3_msg = _llm_verify_diff(state, step_text)
+    if t3_result is True:
+        return True, f"[T3-LLM] {t3_msg}"
+    if t3_result is False:
+        return False, f"[T3-LLM] {t3_msg}"
+
+    # Inconclusive but files were modified — optimistic pass
     if files_modified:
-        return True, "Files were modified; heuristic pass (LLM verify inconclusive)."
-    return False, "No modifications detected."
+        return True, f"[Heuristic] Files modified ({files_modified}) — optimistic pass."
 
+    return False, "No evidence of successful change."
+
+
+# ── decide_next_action ────────────────────────────────────────────────────────
 
 def decide_next_action(state) -> dict:
     phase = getattr(state, "phase", "CODER")
 
-    recent = getattr(state, "recent_actions", [])[-12:]
-    recent_simple = [a for a, _ in recent if a]
-    recent_obs = "\n".join([str(o) for o in getattr(state, "observations", [])[-6:]]) or "None."
-    action_log = getattr(state, "action_log", [])[-8:]
-    history = "\n".join([f"{i+1}. {entry}" for i, entry in enumerate(action_log)]) if action_log else "No actions yet."
-
-    plan_list = getattr(state, "plan", [])
-    current_step_idx = getattr(state, "current_step", 0)
-    current_step_text = plan_list[current_step_idx] if current_step_idx < len(plan_list) else "All steps complete."
-
-    if not hasattr(state, "plan_validators"):
-        state.plan_validators = []
-
-    # ── REVIEWER phase ───────────────────────────────────────────────────────
+    # ── REVIEWER ──────────────────────────────────────────────────────────────
     if phase == "REVIEWER":
-        log.debug("Reviewer: running 3-tier validation for current step.")
+        current_step_idx = getattr(state, "current_step", 0)
 
-        if not hasattr(state, "reject_counts") or not isinstance(state.reject_counts, dict):
+        if not isinstance(getattr(state, "reject_counts", None), dict):
             state.reject_counts = {}
 
-        passed, msg = _run_validator(state, current_step_idx)
+        passed, msg = run_reviewer_check(state, current_step_idx)
 
         if passed:
             log.info(f"[bold green]✅ REVIEWER PASS:[/bold green] {msg}")
             return {
-                "thought": f"Validator passed: {msg}",
-                "tool": {"action": "approve_step", "message": f"Validator passed: {msg}"}
+                "thought": f"Step verified: {msg}",
+                "tool": {"action": "approve_step", "message": msg},
             }
 
-        # Failed — decide whether to reject or abort
-        key = f"step_{current_step_idx}"
-        state.reject_counts[key] = state.reject_counts.get(key, 0) + 1
-        count = state.reject_counts[key]
+        key   = f"step_{current_step_idx}"
+        count = state.reject_counts.get(key, 0) + 1
+        state.reject_counts[key] = count
         log.warning(f"[bold red]❌ REVIEWER REJECT #{count}:[/bold red] {msg}")
 
         if count >= 3:
             return {
-                "thought": f"Validator failed {count} times: {msg}",
-                "tool": {"action": "finish", "commit_message": f"Aborting: repeated failures at step {current_step_idx+1}: {msg}"}
+                "thought": f"Failed {count} times: {msg}",
+                "tool": {
+                    "action": "finish",
+                    "commit_message": f"Aborting: step {current_step_idx + 1} failed {count} times. {msg}",
+                },
             }
 
         return {
-            "thought": f"Validator failed: {msg}",
-            "tool": {"action": "reject_step", "feedback": f"Validator failed: {msg}. Please re-read the file and re-apply the correct change."}
+            "thought": f"Validation failed: {msg}",
+            "tool": {
+                "action": "reject_step",
+                "feedback": (
+                    f"{msg}. "
+                    "Re-read the file and apply the correct change. "
+                    "Do NOT claim success without modifying the file."
+                ),
+            },
         }
 
-    # ── CODER phase ──────────────────────────────────────────────────────────
-    # Build 4-level context hint for the LLM prompt
-    symbol_hint = ""
-    dep_hint = ""
-    if hasattr(state, "symbol_index") and state.symbol_index:
-        sample = list(state.symbol_index.items())[:5]
-        symbol_hint = "SYMBOL INDEX (sample):\n" + "\n".join(
-            f"  {fp}: funcs={[f['name'] for f in v.get('functions', [])[:4]]}"
-            for fp, v in sample
-        )
-    if hasattr(state, "dep_graph") and state.dep_graph:
-        sample = list(state.dep_graph.items())[:4]
-        dep_hint = "DEP GRAPH (sample):\n" + "\n".join(
-            f"  {fp} → {deps[:3]}" for fp, deps in sample
-        )
+    # ── CODER ─────────────────────────────────────────────────────────────────
+    recent       = getattr(state, "recent_actions", [])[-10:]
+    recent_acts  = [a for a, _ in recent if a]
+    recent_obs   = "\n".join(str(o) for o in getattr(state, "observations", [])[-5:]) or "None."
+    history      = "\n".join(
+        f"{i+1}. {e}" for i, e in enumerate(getattr(state, "action_log", [])[-8:])
+    ) or "No history."
 
-    tactical_advice = ""
+    plan_list        = getattr(state, "plan", [])
+    step_idx         = getattr(state, "current_step", 0)
+    current_step     = plan_list[step_idx] if step_idx < len(plan_list) else "All steps complete."
+    context_buffer   = getattr(state, "context_buffer", {})
+    loaded_files     = list(context_buffer.keys())
 
-    loaded_files = list(getattr(state, "context_buffer", {}).keys())
+    # 4-level context hint
+    ctx_hint = ""
+    try:
+        from tools.repo_index import get_context_for_query
+        ctx_hint = get_context_for_query(state, state.goal, max_chars=700)
+    except Exception:
+        pass
 
-    if loaded_files:
-        tactical_advice = f"🚨 TACTICAL AWARENESS: You already loaded {loaded_files}. Use rewrite_function NOW. Do NOT search again."
+    # Multi-file queue hint
+    mf_hint = ""
+    mf_queue = getattr(state, "multi_file_queue", [])
+    mf_done  = getattr(state, "multi_file_done", [])
+    if mf_queue:
+        remaining = [x for x in mf_queue if x.get("file") not in mf_done]
+        if remaining:
+            mf_hint = "MULTI-FILE WORK QUEUE (files still needing changes):\n"
+            for item in remaining[:5]:
+                mf_hint += f"  - {item['file']}: {item.get('description','')}\n"
 
-    elif any(a in recent_simple for a in ["exact_search", "semantic_search"]):
-        tactical_advice = "🚨 You just searched. You MUST read the best file now."
+    prompt = f"""You are Operon's CODER. Your job is to execute the current milestone.
 
-    persona = "You are Operon's CODER. Execute the current milestone efficiently using available tools."
-    guidance = """
-    {tactical_guidance}
-CONSTRAINTS:
-- If you have the file content in context_buffer, prefer rewrite_function directly rather than re-reading.
-- If rewrite_function fails, adjust logic and retry once. Do not loop endlessly.
-- Always read a file before rewriting it unless you already have it in context.
-- Use the 4-level index (semantic_search, symbol lookup, dep graph, ast) to navigate large repos efficiently.
-- Output STRICT JSON: {"thought":"...","tool":{"action":"...", ...}}
-- You are in CODER phase. You MUST NOT call approve_step, reject_step, or finish.
-"""
-    tools = """
-TOOLS:
-- {"action":"find_file","search_term":"..."}
-- {"action":"read_file","path":"path/to/file"}
-- {"action":"semantic_search","query":"..."}
-- {"action":"exact_search","text":"..."}
-- {"action":"rewrite_function","file":"path/to/file"}
-- {"action":"create_file","file_path":"...","initial_content":"..."}
-"""
-
-    prompt = f"""{persona}
-
-[GOAL]
+═══ GOAL ════════════════════════════════════════════════════
 {state.goal}
 
-[CURRENT MILESTONE]
-{current_step_text}
+═══ CURRENT MILESTONE ═══════════════════════════════════════
+{current_step}
 
-[RECENT ACTIONS]
-{', '.join(recent_simple) or 'None.'}
+═══ FILES LOADED IN MEMORY ══════════════════════════════════
+{loaded_files or 'None loaded yet.'}
 
-[RECENT OBSERVATIONS]
+═══ RECENT ACTIONS ══════════════════════════════════════════
+{', '.join(recent_acts) or 'None.'}
+
+═══ RECENT OBSERVATIONS ═════════════════════════════════════
 {recent_obs}
 
-[HISTORY]
+═══ HISTORY ═════════════════════════════════════════════════
 {history}
 
-{symbol_hint}
-{dep_hint}
+{('═══ REPO CONTEXT ════════════════════════════════════════════\n' + ctx_hint) if ctx_hint else ''}
+{mf_hint}
 
-{guidance}
-{tools}
+═══ TOOLS ═══════════════════════════════════════════════════
+{{"action":"find_file","search_term":"..."}}
+{{"action":"read_file","path":"exact/relative/path"}}
+{{"action":"semantic_search","query":"..."}}
+{{"action":"exact_search","text":"..."}}
+{{"action":"rewrite_function","file":"exact/relative/path"}}
+{{"action":"create_file","file_path":"...","initial_content":"..."}}
 
-Output STRICT JSON only.
-{{"thought":"...", "tool":{{"action":"...", ...}}}}
+═══ RULES ═══════════════════════════════════════════════════
+1. Always read a file before rewriting it (unless creating).
+2. Use the EXACT relative path from the repo root.
+3. If you cannot find a file, use find_file or semantic_search.
+4. Never claim a file is modified without calling rewrite_function.
+5. For multi-file tasks, tackle files one at a time.
+
+Output STRICT JSON only:
+{{"thought": "...", "tool": {{"action": "...", ...}}}}
 """
+
     log.debug("Calling LLM for CODER decision...")
-    raw = call_llm(prompt, require_json=True)
+    raw   = call_llm(prompt, require_json=True)
     clean = re.sub(r"(?:```json)?\n?(.*?)\n?```", r"\1", raw, flags=re.DOTALL).strip()
+
     try:
         data = json.loads(clean)
+        # Normalise flat responses (tool fields at top level)
         if "tool" not in data and "action" in data:
-            return {"thought": data.get("thought", ""), "tool": data}
-        if "tool" not in data and isinstance(data, dict) and any(
-            k in data for k in ("action", "file", "path", "query", "text")
-        ):
             return {"thought": data.get("thought", ""), "tool": data}
         return data
     except Exception as e:
-        log.error(f"JSON PARSE ERROR in decide_next_action: {e}\nRaw: {raw[:300]}")
+        log.error(f"CODER JSON parse error: {e}\nRaw: {raw[:300]}")
         return {
-            "thought": "Parsing failed; escalating to REVIEWER",
-            "tool": {"action": "reject_step", "feedback": "Coder returned invalid JSON. Manual review needed."}
+            "thought": "JSON parse failed",
+            "tool": {
+                "action": "reject_step",
+                "feedback": "Coder returned invalid JSON — please retry.",
+            },
         }

@@ -1,12 +1,10 @@
-# main.py
+# main.py — Operon v3
 import sys
 from tui.app import OperonUI
-import json
 
 if __name__ == "__main__":
     try:
-        app = OperonUI()
-        app.run()
+        OperonUI().run()
     except KeyboardInterrupt:
         print("\nOperon shut down safely.")
         sys.exit(0)

@@ -1,81 +1,114 @@
-# agent/planner.py — Operon v2: Context-aware planner using 4-level index
-from agent.llm import call_llm
-from agent.logger import log
+# agent/planner.py — Operon v3
+"""
+Context-aware planner:
+  - Uses the 4-level index (symbol index + dep graph + file tree) to ground the plan
+  - Detects multi-file tasks and returns a structured work queue
+  - Produces precise per-step validators
+  - Keeps prompts short for Qwen 7B @ 8k ctx
+"""
+
 import json
 import re
+from agent.llm import call_llm
+from agent.logger import log
 
 
 def make_plan(goal: str, repo_root: str, state=None):
     """
-    Produce a compact list of milestones (strings) AND a parallel list of
-    validators. Optionally uses the 4-level index (via state) to give the
-    planner richer repo context for better step granularity.
-
     Returns: (steps: list[str], is_question: bool, validators: list[dict|None])
+
+    Also populates state.multi_file_queue if multiple files need changing.
     """
     log.info("[bold magenta]🏛️ ARCHITECT: Building plan...[/bold magenta]")
 
-    # Build repo context hint from 4-level index if available
-    context_hint = ""
+    # ── Build compact repo context from 4-level index ─────────────────────────
+    context_lines: list[str] = []
+
     if state is not None:
-        # Symbol summary
-        sym_idx = getattr(state, "symbol_index", {})
-        if sym_idx:
-            sample_files = list(sym_idx.keys())[:8]
-            sym_lines = []
-            for fp in sample_files:
-                fns = [f["name"] for f in sym_idx[fp].get("functions", [])[:4]]
-                cls = [c["name"] for c in sym_idx[fp].get("classes", [])[:2]]
-                sym_lines.append(f"  {fp}: funcs={fns} classes={cls}")
-            context_hint += "SYMBOL INDEX (sample):\n" + "\n".join(sym_lines) + "\n\n"
+        sym = getattr(state, "symbol_index", {})
+        if sym:
+            sample = list(sym.items())[:10]
+            context_lines.append("SYMBOL INDEX (sample):")
+            for rel, syms in sample:
+                fns  = [f["name"] for f in syms.get("functions", [])[:4]]
+                clss = [c["name"] for c in syms.get("classes",   [])[:2]]
+                context_lines.append(f"  {rel}: funcs={fns} classes={clss}")
 
-        # Dep graph sample
-        dep_graph = getattr(state, "dep_graph", {})
-        if dep_graph:
-            sample_deps = list(dep_graph.items())[:5]
-            dep_lines = [f"  {fp} → {deps[:3]}" for fp, deps in sample_deps]
-            context_hint += "DEP GRAPH (sample):\n" + "\n".join(dep_lines) + "\n\n"
+        dep = getattr(state, "dep_graph", {})
+        if dep:
+            context_lines.append("DEP GRAPH (sample):")
+            for rel, deps in list(dep.items())[:6]:
+                context_lines.append(f"  {rel} → {deps[:3]}")
 
-    prompt = f"""You are Operon's ARCHITECT. You produce precise coding plans.
+        tree = getattr(state, "file_tree", [])
+        if tree:
+            context_lines.append(f"FILE TREE ({len(tree)} files, first 15):")
+            for rel in tree[:15]:
+                context_lines.append(f"  {rel}")
+
+    context_block = "\n".join(context_lines)
+
+    prompt = f"""You are Operon's ARCHITECT. Produce a precise coding plan.
 
 GOAL: {goal}
 
-{context_hint}
+REPO CONTEXT:
+{context_block}
 
-Produce the MINIMAL list of coding milestones to complete the goal.
-For each milestone, produce a simple validator object when possible.
-
-Output STRICT JSON with exactly two keys:
+OUTPUT STRICT JSON with exactly these keys:
 {{
   "steps": ["short milestone string", ...],
-  "validators": [null or {{"type":"...", ...}}, ...]
+  "validators": [null or {{"type":"...", ...}}, ...],
+  "multi_file": [{{"file": "rel/path", "action": "rewrite|create", "description": "..."}}]
 }}
 
-Validator types (choose the most specific):
-  {{"type":"not_contains","file":"path","text":"token_that_should_be_gone"}}
-  {{"type":"contains","file":"path","text":"token_that_must_exist"}}
+Validator types (choose the best match):
+  {{"type":"not_contains","file":"path","text":"token"}}
+  {{"type":"contains","file":"path","text":"token"}}
   {{"type":"lines_removed","file":"path","start":N,"end":M}}
 
 Rules:
-- steps and validators must have the SAME length.
-- Use null validator when you cannot infer a precise check.
-- Keep steps short (one action each, max 12 words).
-- Return ONLY JSON. No markdown, no explanation.
+  - steps and validators MUST have the same length.
+  - Use null validator when unsure.
+  - multi_file lists ALL files that need changes (empty list if just one file).
+  - Keep steps short: one action per step, max 12 words.
+  - Return ONLY JSON. No markdown, no explanation.
 """
 
     raw = call_llm(prompt, require_json=True)
     clean = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw.strip(), flags=re.DOTALL)
+
     try:
         data = json.loads(clean)
         steps = data.get("steps", [])
         validators = data.get("validators", [None] * len(steps))
+        multi_file = data.get("multi_file", [])
+
         if len(validators) < len(steps):
             validators += [None] * (len(steps) - len(validators))
+
         if not steps:
-            raise ValueError("Empty steps from planner")
-        log.info(f"[magenta]Plan ({len(steps)} steps):[/magenta] {steps}")
+            raise ValueError("Empty plan")
+
+        # Populate multi_file_queue on state
+        if state is not None and multi_file:
+            state.multi_file_queue = [
+                item for item in multi_file
+                if isinstance(item, dict) and item.get("file")
+            ]
+            if state.multi_file_queue:
+                log.info(
+                    f"[cyan]📁 Multi-file plan: "
+                    f"{[x['file'] for x in state.multi_file_queue]}[/cyan]"
+                )
+
+        log.info(f"[magenta]Plan ({len(steps)} steps):[/magenta]")
+        for i, s in enumerate(steps):
+            log.info(f"  {i+1}. {s}")
+
         return steps, False, validators
+
     except Exception as e:
-        log.error(f"Planner failed: {e}. Using fallback.")
-        fallback = ["1. Investigate the codebase", "2. Complete the objective"]
+        log.error(f"Planner failed ({e}) — using minimal fallback.")
+        fallback = ["1. Read the relevant files", "2. Apply the required change"]
         return fallback, False, [None, None]
