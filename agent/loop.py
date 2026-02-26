@@ -35,6 +35,7 @@ def _ensure_state_fields(state):
         "recent_actions": [], "reject_counts": {}, "plan_validators": [],
         "symbol_index": {}, "dep_graph": {}, "ast_cache": {},
         "allow_read_skip": False,
+        "rewrite_fail_counts": {}   # ← ADD THIS
     }
     for k, v in defaults.items():
         if not hasattr(state, k):
@@ -693,6 +694,8 @@ def run_agent(state):
                         commit_success(state.repo_root, f"Applied patch to {target_file}")
                         state.done = True
                         return state
+                    # Reset rewrite failure counter on success
+                    state.rewrite_fail_counts[target_file] = 0
 
                     # Normal REVIEWER handoff — REVIEWER now has diff_memory to inspect
                     state.action_log.append(f"SUCCESS: Patched '{target_file}'.")
@@ -717,11 +720,15 @@ def run_agent(state):
                         state.action_log.append(f"FAILED patch on '{target_file}': {err}")
                         state.observations.append({"error": err})
 
-                        # Hard reset to prevent infinite rewrite loops
-                        state.loop_counter += 1
-                        if state.loop_counter >= 3:
+                        # Increment rewrite failure counter
+                        count = state.rewrite_fail_counts.get(target_file, 0) + 1
+                        state.rewrite_fail_counts[target_file] = count
+
+                        if count >= 3:
+                            log.warning(f"Rewrite failed 3 times for '{target_file}'. Escalating to REVIEWER.")
                             state.phase = "REVIEWER"
-                            state.loop_counter = 0
+                            state.step_cooldown = 1
+                            state.rewrite_fail_counts[target_file] = 0
 
             # ── REVIEWER ACTIONS ──────────────────────────────────────────────
             elif act == "approve_step":
