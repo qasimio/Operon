@@ -586,9 +586,10 @@ def run_agent(state):
                     continue
 
                 state.context_buffer[resolved] = content
+                content_len = len(content) if isinstance(content, str) else 0
                 state.observations.append({
-                    "success": f"Loaded '{resolved}' ({len(content)} chars).",
-                    "preview": content[:1500],
+                    "success": f"Loaded '{resolved}' ({content_len} chars).",
+                    "preview": content[:1500] if isinstance(content, str) else "",
                 })
                 if resolved not in state.files_read:
                     state.files_read.append(resolved)
