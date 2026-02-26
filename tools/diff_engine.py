@@ -139,15 +139,16 @@ def apply_patch(
             return result, "noop"
         return result, "ok"
 
-    # ── 3. Fuzzy match (allow 1 mismatched line — handles minor LLM drift) ───
-    idx = _fuzzy_match(orig_lines, search_norm, tolerance=1)
-    if idx is not None:
-        original_indent = len(orig_lines[idx]) - len(orig_lines[idx].lstrip())
-        adjusted = _apply_indent(replace_block, original_indent)
-        final = orig_lines[:idx] + adjusted + orig_lines[idx + len(search_norm):]
-        result = "\n".join(final) + "\n"
-        if result.strip() == original_text.strip():
-            return result, "noop"
-        return result, "ok"
+    # ── 3. Fuzzy match (only for multi-line blocks — avoid false positives) ───
+    if len(search_norm) >= 3:
+        idx = _fuzzy_match(orig_lines, search_norm, tolerance=1)
+        if idx is not None:
+            original_indent = len(orig_lines[idx]) - len(orig_lines[idx].lstrip())
+            adjusted = _apply_indent(replace_block, original_indent)
+            final = orig_lines[:idx] + adjusted + orig_lines[idx + len(search_norm):]
+            result = "\n".join(final) + "\n"
+            if result.strip() == original_text.strip():
+                return result, "noop"
+            return result, "ok"
 
     return None, "no_match"

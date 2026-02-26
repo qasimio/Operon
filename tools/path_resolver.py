@@ -1,111 +1,85 @@
-# tools/path_resolver.py — Operon v3
+# tools/path_resolver.py — Operon v3.1
 """
-THE FIX for Bug #1: "can not figure out file if it is inside folder"
+Resolves any user-supplied filename to an actual repo path.
+This is the fix for: "can not figure out file if it is inside folder."
 
-Claude Code-style path resolution:
-  1. Exact relative path match
+5-tier search (same logic as your working loop.py's resolve_repo_path,
+but extended):
+  1. Exact relative path
   2. Case-insensitive exact match
-  3. Recursive filename match (shortest path wins)
-  4. Fuzzy basename match (substring)
-  5. Cross-check against the 4-level symbol index
-  6. Give up and return original (let caller create it)
+  3. Recursive filename match  (all extensions, shortest path wins)
+  4. Fuzzy basename stem match  (e.g. "semantic" → "tools/semantic_memory.py")
+  5. Symbol index lookup        (if state provided)
 """
-
 from __future__ import annotations
+
 from pathlib import Path
-from typing import Optional
-import os
+from typing import Optional, Tuple
 
 IGNORE_DIRS = {".git", ".venv", "__pycache__", "node_modules", "dist", "build", ".operon"}
 
 
-def _all_files(repo_root: str) -> list[Path]:
+def _all_files(repo_root: str):
     root = Path(repo_root)
-    out: list[Path] = []
     for p in root.rglob("*"):
         if p.is_file() and not any(d in p.parts for d in IGNORE_DIRS):
-            out.append(p)
-    return out
+            yield p
 
 
-def resolve_path(
-    user_path: str,
-    repo_root: str,
-    state=None,
-    must_exist: bool = False,
-) -> tuple[str, bool]:
+def resolve_path(user_path: str, repo_root: str, state=None) -> Tuple[str, bool]:
     """
     Returns (resolved_relative_path, found: bool).
-
-    If must_exist=True and nothing found, returns (user_path, False).
-    Callers should check `found` before assuming the file exists.
+    If not found, returns (user_path, False) so callers can create it.
     """
     if not user_path:
         return user_path, False
 
     root = Path(repo_root)
 
-    # ── 1. Exact relative path ────────────────────────────────────────────────
-    candidate = root / user_path
-    if candidate.is_file():
-        return str(candidate.relative_to(root)), True
+    # 1. Exact relative path
+    if (root / user_path).is_file():
+        return user_path, True
 
-    # ── 2. Case-insensitive exact match ───────────────────────────────────────
+    # 2. Case-insensitive exact
     user_lower = user_path.lower().replace("\\", "/")
     for p in _all_files(repo_root):
         rel = str(p.relative_to(root)).replace("\\", "/")
         if rel.lower() == user_lower:
             return rel, True
 
-    # ── 3. Recursive filename match (shortest wins) ───────────────────────────
+    # 3. Recursive filename match
     target_name = Path(user_path).name.lower()
-    matches: list[Path] = [
-        p for p in _all_files(repo_root) if p.name.lower() == target_name
-    ]
+    matches = [p for p in _all_files(repo_root) if p.name.lower() == target_name]
     if matches:
         best = min(matches, key=lambda p: len(p.parts))
         return str(best.relative_to(root)), True
 
-    # ── 4. Fuzzy basename substring match ─────────────────────────────────────
+    # 4. Fuzzy stem match
     stem = Path(user_path).stem.lower()
-    if len(stem) > 3:  # avoid matching single-char stems
-        fuzzy: list[Path] = [
-            p for p in _all_files(repo_root) if stem in p.stem.lower()
-        ]
-        if len(fuzzy) == 1:
-            return str(fuzzy[0].relative_to(root)), True
-        if len(fuzzy) > 1:
-            # Pick shortest (most likely to be the root-level file)
+    if len(stem) > 2:
+        fuzzy = [p for p in _all_files(repo_root) if stem in p.stem.lower()]
+        if fuzzy:
             best = min(fuzzy, key=lambda p: len(p.parts))
             return str(best.relative_to(root)), True
 
-    # ── 5. Symbol index lookup ────────────────────────────────────────────────
+    # 5. Symbol index
     if state is not None:
-        sym_idx = getattr(state, "symbol_index", {})
-        for rel_path in sym_idx:
-            if Path(rel_path).stem.lower() == stem:
-                return rel_path, True
+        for rel in getattr(state, "symbol_index", {}):
+            if Path(rel).stem.lower() == stem:
+                return rel, True
 
-    # ── 6. Give up ────────────────────────────────────────────────────────────
     return user_path, False
 
 
-def file_exists(user_path: str, repo_root: str, state=None) -> bool:
-    _, found = resolve_path(user_path, repo_root, state)
-    return found
-
-
-def read_resolved(user_path: str, repo_root: str, state=None) -> tuple[str, str, bool]:
-    """
-    Returns (resolved_path, content, success).
-    Tries to resolve the path and read the file.
-    """
+def read_resolved(
+    user_path: str, repo_root: str, state=None
+) -> Tuple[str, str, bool]:
+    """Returns (resolved_path, content, success)."""
     resolved, found = resolve_path(user_path, repo_root, state)
     if not found:
         return resolved, "", False
     try:
-        full = Path(repo_root) / resolved
-        content = full.read_text(encoding="utf-8", errors="ignore")
+        content = (Path(repo_root) / resolved).read_text(encoding="utf-8", errors="ignore")
         return resolved, content, True
     except Exception:
         return resolved, "", False

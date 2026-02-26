@@ -1,22 +1,31 @@
-# agent/loop.py — Operon v3
+# agent/loop.py — Operon v3.1
 """
-Complete rewrite fixing every identified bug:
+Complete merge of your working loop.py with v3 fixes.
 
-  BUG 1 FIX: File resolution — uses path_resolver.resolve_path() which does
-             recursive fuzzy search so nested files are always found.
+WHAT WAS BROKEN (from log analysis):
+  1. read_file("print.js") → Path(repo_root)/"print.js" doesn't exist
+     because the file is at agent/print.js. No fuzzy resolution.
+     FIX: resolve_path() before every read_file and rewrite_function.
 
-  BUG 2 FIX: "No change" = success — rewrite_function now returns {"noop": True}
-             when the file wasn't changed, counts toward noop_streak, and forces
-             the REVIEWER to reject (so the coder tries again with a real fix).
+  2. REVIEWER hot-loop: after reject×3, "finish" was blocked by tool_jail,
+     so the loop called decide() again every 0.1s → 30 rejects/second.
+     FIX: reject_counts tracked in loop.py. At threshold → force abort
+     directly (state.done = True) WITHOUT going through decide() again.
 
-  BUG 3 FIX: Rollback destroys user work — rollback_files() is surgical: only
-             restores files Operon touched. User's pre-existing changes are
-             preserved via git stash at session start.
+  3. "No change made" was treated as success (noop).
+     FIX: _rewrite_function returns {"noop": True}. Loop treats noop as
+     an error, injects corrective feedback, does NOT hand off to REVIEWER.
 
-  EXTRA:     Multi-file support — state.multi_file_queue is processed in order,
-             one file per CODER→REVIEWER cycle.
+  4. REVIEWER had no file evidence → always said "file is unmodified."
+     FIX: context_buffer with file preview always injected into REVIEWER
+     prompt in decide.py.
+
+KEPT from your working version:
+  - resolve_repo_path() approach (now via path_resolver.py)
+  - tactical prompt injection in decide.py
+  - REVIEWER prompt with file_preview evidence
+  - All the clean normalisation and canonical loop detection
 """
-
 from __future__ import annotations
 
 import difflib
@@ -33,80 +42,64 @@ from agent.decide import decide_next_action
 from agent.planner import make_plan
 from agent.validators import validate_step as _validate_step
 from tools.diff_engine import parse_search_replace, apply_patch
-from tools.fs_tools import read_file
 from tools.git_safety import setup_git_env, rollback_files, commit_success
 from tools.path_resolver import resolve_path, read_resolved
 from tools.repo_search import search_repo
 from tools.universal_parser import check_syntax
 
-MAX_STEPS        = 40
-NOOP_STREAK_MAX  = 3   # consecutive no-change rewrites before escalating
+MAX_STEPS       = 30
+NOOP_STREAK_MAX = 3
+REJECT_THRESHOLD = 3
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# State initialisation helpers
-# ─────────────────────────────────────────────────────────────────────────────
+# ── State init ───────────────────────────────────────────────────────────────
 
-def _ensure_fields(state) -> None:
+def _ensure(state) -> None:
     defaults: dict[str, Any] = {
-        "action_log":          [],
-        "observations":        [],
-        "context_buffer":      {},
-        "current_step":        0,
-        "loop_counter":        0,
-        "last_action_payload": None,
-        "last_action_canonical": None,
-        "step_count":          0,
-        "files_read":          [],
-        "files_modified":      [],
-        "done":                False,
-        "phase":               "CODER",
-        "diff_memory":         {},
-        "git_state":           {},
-        "skip_counts":         {},
-        "search_counts":       {},
-        "step_cooldown":       0,
-        "recent_actions":      [],
-        "reject_counts":       {},
-        "plan_validators":     [],
-        "symbol_index":        {},
-        "dep_graph":           {},
-        "rev_dep":             {},
-        "file_tree":           [],
-        "multi_file_queue":    [],
-        "multi_file_done":     [],
-        "noop_streak":         0,
-        "allow_read_skip":     False,
+        "action_log":             [],
+        "observations":           [],
+        "context_buffer":         {},
+        "current_step":           0,
+        "loop_counter":           0,
+        "last_action_canonical":  None,
+        "step_count":             0,
+        "files_read":             [],
+        "files_modified":         [],
+        "done":                   False,
+        "phase":                  "CODER",
+        "diff_memory":            {},
+        "git_state":              {},
+        "search_counts":          {},
+        "recent_actions":         [],
+        "reject_counts":          {},
+        "plan_validators":        [],
+        "symbol_index":           {},
+        "dep_graph":              {},
+        "rev_dep":                {},
+        "file_tree":              [],
+        "multi_file_queue":       [],
+        "multi_file_done":        [],
+        "noop_streak":            0,
+        "is_question":            False,
+        "step_cooldown":          0,
     }
     for k, v in defaults.items():
         if not hasattr(state, k) or getattr(state, k) is None:
             setattr(state, k, v)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Payload normalisation
-# ─────────────────────────────────────────────────────────────────────────────
+# ── Normalise / canonicalise ─────────────────────────────────────────────────
 
-def _normalise(act: str, payload: dict) -> dict:
-    p = dict(payload) if isinstance(payload, dict) else {}
-
-    # Alias normalisation
-    alias_pairs = [
-        ("file",      "file_path"),
-        ("file_path", "file"),
-        ("path",      "file_path"),
-        ("file_path", "path"),
-    ]
-    for src, dst in alias_pairs:
-        if src in p and dst not in p:
-            p[dst] = p[src]
-
-    # content synonyms → initial_content
+def _norm(act: str, p: dict) -> dict:
+    p = dict(p) if isinstance(p, dict) else {}
+    # alias cross-fills
+    for a, b in [("file", "file_path"), ("file_path", "file"),
+                 ("path", "file_path"), ("file_path", "path")]:
+        if a in p and b not in p:
+            p[b] = p[a]
     for k in ("new_content", "content", "function_content"):
         if k in p and "initial_content" not in p:
             p["initial_content"] = p[k]
-
-    # action-specific fixes
     if act == "rewrite_function" and "file_path" in p and "file" not in p:
         p["file"] = p["file_path"]
     if act == "read_file":
@@ -116,175 +109,119 @@ def _normalise(act: str, payload: dict) -> dict:
             p["path"] = p["file_path"]
     if act == "create_file" and "initial_content" not in p:
         p["initial_content"] = ""
-
     return p
 
 
-def _canonicalise(payload: dict) -> str:
+def _canon(payload: dict) -> str:
     try:
         return json.dumps(payload, sort_keys=True, default=str)
     except Exception:
         return str(payload)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Loop detection helpers
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _register_action(state, act: str, canonical: str) -> None:
-    if not hasattr(state, "recent_actions"):
-        state.recent_actions = []
-    state.recent_actions.append((act, canonical))
-    if len(state.recent_actions) > 16:
-        state.recent_actions.pop(0)
+def _is_noop(act: str, payload: dict) -> bool:
+    if not act or act.lower() in {"noop", "error", "none", ""}:
+        return True
+    if act == "create_file" and not payload.get("file_path"):
+        return True
+    if act == "rewrite_function" and not (payload.get("file") or payload.get("initial_content")):
+        return True
+    return False
 
 
-def _alternating_loop(state, window: int = 6) -> bool:
-    seq  = getattr(state, "recent_actions", [])[-window:]
-    if len(seq) < 4:
-        return False
-    acts = [a for a, _ in seq]
-    uniq = list(dict.fromkeys(acts))
-    if len(uniq) != 2:
-        return False
-    return all(acts[i] == uniq[i % 2] for i in range(len(acts)))
-
-
-def _track_search(state, key: str) -> int:
-    if not hasattr(state, "search_counts"):
-        state.search_counts = {}
-    e = state.search_counts.get(key, {"count": 0, "last_step": 0})
-    e["count"]     += 1
-    e["last_step"]  = getattr(state, "step_count", 0)
-    state.search_counts[key] = e
-    return e["count"]
-
-
-def _throttle_search(state, key: str, max_r: int = 3, cool: int = 15) -> bool:
-    e = getattr(state, "search_counts", {}).get(key)
-    if not e:
-        return False
-    return e["count"] > max_r and (state.step_count - e["last_step"]) < cool
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# diff persistence
-# ─────────────────────────────────────────────────────────────────────────────
+# ── diff persistence ─────────────────────────────────────────────────────────
 
 def _persist_diff(state) -> None:
     try:
         odir = Path(state.repo_root) / ".operon"
         odir.mkdir(parents=True, exist_ok=True)
-        out = odir / "last_session_diff.json"
-
-        serialisable: dict = {}
-        for fp, patches in state.diff_memory.items():
-            serialisable[fp] = [
-                {k: v for k, v in p.items() if k in ("ts", "diff", "before", "after")}
-                for p in patches
-            ]
-        out.write_text(json.dumps(serialisable, indent=2), encoding="utf-8")
-
-        # human-readable copy
-        txt = odir / "last_session_diff.txt"
-        lines = ["OPERON v3 DIFF REPORT", "=" * 70]
-        import datetime
-        for fp, patches in serialisable.items():
-            lines += ["", f"FILE: {fp}", "-" * 70]
-            for patch in patches:
-                ts = datetime.datetime.fromtimestamp(patch.get("ts", 0)).isoformat()
-                lines += [f"\nPATCH @ {ts}", patch.get("diff", "(no diff)"), ""]
-        txt.write_text("\n".join(lines), encoding="utf-8")
+        out = {
+            fp: [{"ts": p.get("ts", 0), "diff": p.get("diff", "")}
+                 for p in patches]
+            for fp, patches in state.diff_memory.items()
+        }
+        (odir / "last_diff.json").write_text(
+            json.dumps(out, indent=2), encoding="utf-8"
+        )
     except Exception as e:
-        log.debug(f"diff persist error: {e}")
+        log.debug(f"diff persist: {e}")
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Core rewrite engine
-# ─────────────────────────────────────────────────────────────────────────────
+# ── Core rewrite engine ──────────────────────────────────────────────────────
 
 def _rewrite_function(state, file_path: str) -> dict:
     """
-    Resolves the file path, asks LLM for SEARCH/REPLACE blocks,
-    dry-runs them, gets user approval, then writes.
-
-    Returns one of:
-      {"success": True,  "file": path, "noop": False, "message": "..."}
-      {"success": True,  "file": path, "noop": True,  "message": "No changes."}
-      {"success": False, "error": "..."}
+    Returns:
+      {"success": True,  "file": path, "noop": False}  — change applied
+      {"success": True,  "file": path, "noop": True}   — no change (BUG2 FIX)
+      {"success": False, "error": "..."}               — hard failure
     """
     from agent.approval import ask_user_approval
 
-    # ── BUG 1 FIX: resolve path recursively ──────────────────────────────────
+    # Resolve path (BUG1 FIX)
     resolved, found = resolve_path(file_path, state.repo_root, state)
-    if not found:
-        # If it doesn't exist and isn't in the index, it might be a creation
-        resolved = file_path
-
-    full_path = Path(state.repo_root) / resolved
-    full_path.parent.mkdir(parents=True, exist_ok=True)
-    if not full_path.exists():
-        full_path.touch()
+    full = Path(state.repo_root) / resolved
+    full.parent.mkdir(parents=True, exist_ok=True)
+    if not full.exists():
+        full.touch()
 
     try:
-        original_text = full_path.read_text(encoding="utf-8", errors="ignore")
+        original = full.read_text(encoding="utf-8", errors="ignore")
     except Exception as e:
         return {"success": False, "error": f"Cannot read {resolved}: {e}"}
 
-    # ── Fast path: explicit "delete lines X-Y" ────────────────────────────────
-    goal = getattr(state, "goal", "") or ""
-    m = re.search(r"\bdelete\s+lines?\s+(\d+)\s*[-–]\s*(\d+)\b", goal, re.IGNORECASE)
+    # Fast path: explicit "delete lines X-Y" in goal
+    goal = (getattr(state, "goal", "") or "").lower()
+    m = re.search(r"\bdelete\s+lines?\s+(\d+)\s*[-–]\s*(\d+)\b", goal)
     if m:
-        s, e = max(1, int(m.group(1))), int(m.group(2))
-        lines = original_text.splitlines()
+        s, e_num = max(1, int(m.group(1))), int(m.group(2))
+        lines     = original.splitlines()
         if s <= len(lines):
-            snippet  = "\n".join(lines[s - 1 : e])
-            new_text = "\n".join(lines[: s - 1] + lines[e:]) + "\n"
-            # BUG 2 FIX: detect noop
-            if new_text.strip() == original_text.strip():
-                return {"success": True, "file": resolved, "noop": True, "message": "Line deletion produced no change."}
-            approval = {"file": resolved, "search": f"[lines {s}–{e}]\n{snippet}", "replace": ""}
-            if not ask_user_approval("rewrite_function", approval):
+            snippet  = "\n".join(lines[s-1 : e_num])
+            new_text = "\n".join(lines[:s-1] + lines[e_num:]) + "\n"
+            if new_text.strip() == original.strip():
+                return {"success": True, "file": resolved, "noop": True,
+                        "message": "Line deletion produced no change."}
+            if not ask_user_approval("rewrite_function",
+                                     {"file": resolved,
+                                      "search": f"[lines {s}–{e_num}]\n{snippet}",
+                                      "replace": ""}):
                 return {"success": False, "error": "User rejected deletion."}
             if not check_syntax(new_text, resolved):
-                return {"success": False, "error": f"Syntax error after deleting lines {s}–{e}."}
-            full_path.write_text(new_text, encoding="utf-8")
-            return {"success": True, "file": resolved, "noop": False, "message": f"Deleted lines {s}–{e}."}
+                return {"success": False, "error": "Syntax error after deletion."}
+            full.write_text(new_text, encoding="utf-8")
+            return {"success": True, "file": resolved, "noop": False,
+                    "message": f"Deleted lines {s}–{e_num}."}
 
-    # ── Get 4-level context hint ───────────────────────────────────────────────
+    # Ask LLM for SEARCH/REPLACE blocks
     ctx_hint = ""
     try:
         from tools.repo_index import get_context_for_query
-        ctx_hint = get_context_for_query(state, goal, max_chars=500)
+        ctx_hint = get_context_for_query(state, state.goal, max_chars=400)
     except Exception:
         pass
 
-    # ── LLM prompt for SEARCH/REPLACE ────────────────────────────────────────
-    prompt = f"""You are Operon's surgical code editor.
-
-GOAL:    {goal}
-FILE:    {resolved}
+    prompt = f"""You are Operon, a surgical code editor.
+GOAL: {state.goal}
+FILE: {resolved}
 {('CONTEXT:\n' + ctx_hint) if ctx_hint else ''}
 
-Produce ONLY SEARCH/REPLACE blocks. No explanation, no markdown.
+Output ONLY SEARCH/REPLACE blocks — nothing else.
 
-Format (exact):
 <<<<<<< SEARCH
 [exact lines to replace or delete]
 =======
-[replacement lines — empty to DELETE]
+[replacement — leave empty to DELETE]
 >>>>>>> REPLACE
 
 Rules:
-- SEARCH must match the file exactly (whitespace-normalised).
-- To delete: fill SEARCH, leave REPLACE empty.
-- To append: leave SEARCH empty, put new code in REPLACE.
-- Multiple blocks are allowed in sequence.
-- Output NOTHING except the blocks.
+- SEARCH must match existing file content exactly (whitespace-normalised).
+- Multiple blocks allowed.
+- To append: empty SEARCH, new code in REPLACE.
+- Output NOTHING except blocks.
 
 FILE CONTENT:
-{original_text}
-"""
+{original}"""
 
     try:
         raw = call_llm(prompt, require_json=False)
@@ -293,120 +230,129 @@ FILE CONTENT:
 
     blocks = parse_search_replace(raw) if raw else []
 
-    # Fallback: full replacement from context_buffer
+    # Fallback: candidate in context_buffer
     if not blocks:
-        candidate = state.context_buffer.get(resolved) or state.context_buffer.get(file_path)
-        if candidate and isinstance(candidate, str) and candidate.strip() != original_text.strip():
-            blocks = [("", candidate)]  # empty search = append/replace entire file content
+        candidate = (
+            state.context_buffer.get(resolved) or
+            state.context_buffer.get(file_path)
+        )
+        if candidate and isinstance(candidate, str) and candidate.strip() != original.strip():
+            blocks = [("", candidate)]
         else:
-            return {
-                "success": True, "file": resolved, "noop": True,
-                "message": "LLM produced no SEARCH/REPLACE blocks and no candidate in buffer.",
-            }
+            return {"success": True, "file": resolved, "noop": True,
+                    "message": "LLM produced no SEARCH/REPLACE and no buffer candidate."}
 
-    # ── Dry-run all blocks ────────────────────────────────────────────────────
-    working_text = original_text
-    preview_patches: list[dict] = []
-    any_change = False
+    # Dry-run
+    working  = original
+    any_real = False
+    patches  = []
 
-    for search_block, replace_block in blocks:
-        sb = (search_block or "").rstrip("\n")
-        rb = (replace_block or "").rstrip("\n")
+    for sb, rb in blocks:
+        sb = (sb or "").rstrip("\n")
+        rb = (rb or "").rstrip("\n")
+        patches.append({"search": sb, "replace": rb})
 
-        patched, reason = apply_patch(working_text, sb, rb)
+        # deletion with empty replace
+        if sb and not rb:
+            if sb in working:
+                working  = working.replace(sb, "", 1)
+                any_real = True
+                continue
+            # whitespace-normalised deletion fallback
+            words = sb.split()
+            if words:
+                pat = r'\s+'.join(re.escape(w) for w in words)
+                mm  = re.search(pat, working)
+                if mm:
+                    working  = working[:mm.start()] + working[mm.end():]
+                    any_real = True
+                    continue
+            return {"success": False,
+                    "error": (
+                        f"SEARCH block not found in {resolved}. "
+                        "Hint: read the file first and use an exact snippet."
+                    )}
+
+        # append
+        if not working.strip() and rb:
+            working  = rb + "\n"
+            any_real = True
+            continue
+
+        # normal patch  (returns (text, reason) in our diff_engine)
+        result = apply_patch(working, sb, rb)
+        # Handle both old (returns str|None) and new (returns tuple) diff_engine
+        if isinstance(result, tuple):
+            patched, reason = result
+        else:
+            patched, reason = result, ("ok" if result is not None else "no_match")
 
         if reason == "noop":
-            continue  # this block changed nothing — skip silently
-
+            continue
         if patched is None:
-            # Last-resort: regex-normalized deletion
-            if sb and not rb:
-                words   = sb.split()
-                pattern = r"\s+".join(re.escape(w) for w in words)
-                mm      = re.search(pattern, working_text)
-                if mm:
-                    patched = working_text[: mm.start()] + working_text[mm.end() :]
-                    reason  = "ok"
+            return {"success": False,
+                    "error": (
+                        f"SEARCH block did not match {resolved}. "
+                        "Read the file first, then use an exact snippet."
+                    )}
+        if patched != working:
+            working  = patched
+            any_real = True
 
-        if patched is None:
-            return {
-                "success": False,
-                "error": (
-                    f"SEARCH block not found in {resolved}. "
-                    "Hint: use find_file or read_file to get the exact content first, "
-                    "then match a smaller unique snippet."
-                ),
-            }
+    # BUG2 FIX: hard noop guard
+    if not any_real or working.strip() == original.strip():
+        return {"success": True, "file": resolved, "noop": True,
+                "message": "Dry-run produced no net change."}
 
-        if patched != working_text:
-            working_text = patched
-            any_change   = True
-        preview_patches.append({"search": sb, "replace": rb})
+    # Approval
+    joined_s = "\n---\n".join(p["search"]  for p in patches)
+    joined_r = "\n---\n".join(p["replace"] for p in patches)
+    if not ask_user_approval("rewrite_function",
+                             {"file": resolved,
+                              "search": joined_s,
+                              "replace": joined_r}):
+        return {"success": False, "error": "User rejected."}
 
-    # BUG 2 FIX: hard noop check
-    if not any_change or working_text.strip() == original_text.strip():
-        return {
-            "success": True, "file": resolved, "noop": True,
-            "message": "Dry-run produced no changes — SEARCH blocks matched but replacement was identical.",
-        }
+    # Syntax check
+    if not check_syntax(working, resolved):
+        full.write_text(original, encoding="utf-8")
+        return {"success": False, "error": "Syntax error after patch — restored."}
 
-    # ── Approval ──────────────────────────────────────────────────────────────
-    joined_search  = "\n\n---\n\n".join(p["search"]  for p in preview_patches)
-    joined_replace = "\n\n---\n\n".join(p["replace"] for p in preview_patches)
-    approval_payload = {
-        "file":    resolved,
-        "search":  joined_search,
-        "replace": joined_replace,
-    }
-    if not ask_user_approval("rewrite_function", approval_payload):
-        return {"success": False, "error": "User rejected the change."}
-
-    # ── Syntax check ─────────────────────────────────────────────────────────
-    if not check_syntax(working_text, resolved):
-        full_path.write_text(original_text, encoding="utf-8")
-        return {"success": False, "error": "Syntax error after patch — file restored."}
-
-    # ── Write ─────────────────────────────────────────────────────────────────
     try:
-        full_path.write_text(working_text, encoding="utf-8")
+        full.write_text(working, encoding="utf-8")
     except Exception as e:
         try:
-            full_path.write_text(original_text, encoding="utf-8")
+            full.write_text(original, encoding="utf-8")
         except Exception:
             pass
         return {"success": False, "error": f"Write failed: {e}"}
 
-    return {"success": True, "file": resolved, "noop": False, "message": "Patch applied."}
+    return {"success": True, "file": resolved, "noop": False}
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Main agent loop
-# ─────────────────────────────────────────────────────────────────────────────
+# ── Main loop ────────────────────────────────────────────────────────────────
 
 def run_agent(state):
     from agent.tool_jail import validate_tool
     from agent.approval import ask_user_approval
 
-    _ensure_fields(state)
+    _ensure(state)
 
-    REJECT_THRESHOLD = getattr(state, "reject_threshold", 3)
-
-    # ── ARCHITECT: build index + plan ────────────────────────────────────────
+    # ── ARCHITECT ────────────────────────────────────────────────────────────
     if not getattr(state, "plan", None):
-        state.phase    = "ARCHITECT"
+        state.phase     = "ARCHITECT"
         state.git_state = setup_git_env(state.repo_root)
 
-        # Build 4-level index BEFORE planning (gives planner context)
         try:
             from tools.repo_index import build_full_index
             build_full_index(state)
         except Exception as e:
-            log.warning(f"Index build failed (non-fatal): {e}")
+            log.warning(f"Index build (non-fatal): {e}")
 
         try:
-            result = make_plan(state.goal, state.repo_root, state=state)
-            state.plan           = result[0]
-            state.is_question    = bool(result[1]) if len(result) > 1 else False
+            result            = make_plan(state.goal, state.repo_root, state=state)
+            state.plan        = result[0]
+            state.is_question = bool(result[1]) if len(result) > 1 else False
             state.plan_validators = list(result[2]) if len(result) > 2 else []
         except Exception:
             log.error("Planner crashed — using fallback.")
@@ -423,124 +369,172 @@ def run_agent(state):
 
     state.phase = "CODER"
 
-    # ── Main loop ─────────────────────────────────────────────────────────────
+    # ── Execution loop ───────────────────────────────────────────────────────
     while not state.done:
+
         if state.step_count >= MAX_STEPS:
-            log.error(f"Max steps ({MAX_STEPS}) reached.")
+            log.error(f"Max steps ({MAX_STEPS}) reached — aborting.")
             rollback_files(state.repo_root, state.git_state, state.files_modified)
             break
 
         if getattr(state, "step_cooldown", 0) > 0:
             state.step_cooldown -= 1
             state.step_count    += 1
-            time.sleep(0.1)
+            time.sleep(0.05)
             continue
 
-        # ── Decide ───────────────────────────────────────────────────────────
+        # ── Decide ──────────────────────────────────────────────────────────
         decision = decide_next_action(state) or {}
+        thought  = decision.get("thought", "…")
+        ap       = decision.get("tool", decision) or {}
+        if isinstance(ap, dict) and "action" not in ap and "tool" in ap:
+            ap = ap["tool"]
 
-        thought        = decision.get("thought", "…")
-        action_payload = decision.get("tool", decision) or {}
-        if isinstance(action_payload, dict) and "action" not in action_payload and "tool" in action_payload:
-            action_payload = action_payload["tool"]
+        act = (ap.get("action") if isinstance(ap, dict) else None) or ""
+        np  = _norm(act, ap if isinstance(ap, dict) else {})
+        canonical = _canon({"action": act, **np})
 
-        act = (action_payload.get("action") if isinstance(action_payload, dict) else None) or ""
-        np  = _normalise(act, action_payload if isinstance(action_payload, dict) else {})
-        canonical = _canonicalise({"action": act, **np})
-
-        _register_action(state, act, canonical)
-
-        # ── Noop / malformed guard ────────────────────────────────────────────
-        if not act or act.lower() in {"noop", "error", "none", ""}:
-            log.warning("LLM returned empty/noop action.")
-            state.observations.append({"error": "No valid action from LLM. Try a different approach."})
+        # ── Noop guard ───────────────────────────────────────────────────────
+        if _is_noop(act, np):
+            log.warning("Noop/malformed action.")
+            state.observations.append({"error": "No valid action. Try a different approach."})
             state.step_count += 1
             time.sleep(0.3)
             continue
 
-        # ── Tool jail ─────────────────────────────────────────────────────────
+        # ── Tool jail ────────────────────────────────────────────────────────
         valid, msg = validate_tool(act, np, state.phase, state)
         if not valid:
+            # BUG: old code spun forever when "finish" was blocked.
+            # Now: if we're in REVIEWER and finish is blocked, abort cleanly.
+            if act == "finish" and state.phase == "REVIEWER":
+                key   = f"step_{state.current_step}"
+                count = state.reject_counts.get(key, 0)
+                if count >= REJECT_THRESHOLD:
+                    log.error("finish blocked + reject threshold reached — aborting task.")
+                    rollback_files(state.repo_root, state.git_state,
+                                   state.files_modified)
+                    state.done = True
+                    break
             log.warning(f"Tool jail: {msg}")
             state.observations.append({"error": f"SYSTEM: {msg}"})
             state.step_count += 1
             time.sleep(0.3)
             continue
 
-        # ── Alternating-loop detector ─────────────────────────────────────────
-        if _alternating_loop(state):
-            log.error("Alternating loop detected — escalating to REVIEWER.")
-            state.observations.append({"error": "Loop detected. Escalating to REVIEWER."})
-            state.phase       = "REVIEWER"
-            state.recent_actions = []
-            state.step_count += 1
-            time.sleep(0.2)
-            continue
-
-        # ── Search throttle ───────────────────────────────────────────────────
-        q_key = (
-            np.get("query") or np.get("text") or np.get("search_term") or ""
-            if act in {"semantic_search", "exact_search", "find_file"} else ""
-        )
-        if q_key:
-            _track_search(state, q_key)
-            if _throttle_search(state, q_key):
-                log.warning(f"Throttling '{q_key}' → REVIEWER.")
-                state.observations.append({"error": f"Too many searches for '{q_key}'. Change strategy."})
-                state.phase      = "REVIEWER"
-                state.step_count += 1
-                time.sleep(0.2)
-                continue
-
-        # ── Exact-repeat loop breaker ─────────────────────────────────────────
+        # ── Exact repeat loop detection ───────────────────────────────────────
         if getattr(state, "last_action_canonical", None) == canonical:
-            state.loop_counter += 1
+            state.loop_counter = getattr(state, "loop_counter", 0) + 1
+            log.error(f"LOOP DETECTED ({state.loop_counter}): {act}")
             if state.loop_counter >= 3:
-                log.error("Exact loop × 3 — forcing REVIEWER.")
-                state.phase             = "REVIEWER"
-                state.loop_counter      = 0
+                log.error("CRITICAL LOOP — forcing REVIEWER.")
+                state.observations.append({
+                    "error": "FATAL LOOP: You are stuck repeating the same action. "
+                             "The REVIEWER will now judge current progress."
+                })
+                state.phase              = "REVIEWER"
                 state.last_action_canonical = None
-                state.observations.append({"error": "Stuck in exact repeat. Escalating."})
+                state.loop_counter       = 0
             else:
-                state.observations.append({"error": "Repeated identical action. Do something different."})
+                state.observations.append({
+                    "error": (
+                        "SYSTEM OVERRIDE: You just did this exact action. "
+                        "Do something different — if you already read a file, "
+                        "call rewrite_function on it now."
+                    )
+                })
             state.step_count += 1
-            time.sleep(0.2)
+            time.sleep(0.3)
             continue
         else:
-            state.loop_counter          = 0
-            state.last_action_payload   = np
-            state.last_action_canonical = canonical
+            state.loop_counter            = 0
+            state.last_action_canonical   = canonical
 
-        # ── Execute ───────────────────────────────────────────────────────────
         state.step_count += 1
         log.info(f"[cyan][{state.phase}][/cyan] 🧠 {thought}")
         log.info(f"[cyan]⚙️  {act}[/cyan]")
 
         try:
-            # ── SEARCH ACTIONS ────────────────────────────────────────────────
-            if act == "semantic_search":
+            # ═══════════════════════════════════════════════════════════════
+            #  REVIEWER ACTIONS
+            # ═══════════════════════════════════════════════════════════════
+            if act == "approve_step":
+                state.action_log.append(
+                    f"✅ REVIEWER approved step {state.current_step + 1}."
+                )
+                state.current_step += 1
+                state.reject_counts = {}
+                state.noop_streak   = 0
+                state.step_cooldown = 1
+
+                if state.current_step >= len(state.plan):
+                    log.info("[bold green]✅ All steps done. REVIEWER should finish.[/bold green]")
+                    state.observations.append(
+                        {"system": "All steps complete. Use 'finish' tool now."}
+                    )
+                else:
+                    log.info(f"[yellow]👨‍💻 CODER: step {state.current_step + 1}[/yellow]")
+                    state.phase        = "CODER"
+                    state.observations = []
+
+            elif act == "reject_step":
+                feedback = np.get("feedback") or np.get("message") or "No feedback."
+                key      = f"step_{state.current_step}"
+                state.reject_counts[key] = state.reject_counts.get(key, 0) + 1
+                count = state.reject_counts[key]
+                state.action_log.append(
+                    f"❌ REJECTED step {state.current_step + 1} (×{count}): {feedback}"
+                )
+                state.observations.append({"reviewer_feedback": feedback})
+
+                if count >= REJECT_THRESHOLD:
+                    log.error(f"Step rejected {count} times — aborting task.")
+                    rollback_files(state.repo_root, state.git_state,
+                                   state.files_modified)
+                    state.done = True
+                    break
+
+                state.phase         = "CODER"
+                state.step_cooldown = 2
+                log.info(
+                    f"[red]👨‍💻 Back to CODER ({count}/{REJECT_THRESHOLD}): {feedback}[/red]"
+                )
+
+            elif act == "finish":
+                msg = np.get("message") or np.get("commit_message") or "Task complete."
+                log.info(f"[bold green]✅ DONE: {msg}[/bold green]")
+                commit_success(state.repo_root, msg)
+                state.done = True
+                break
+
+            # ═══════════════════════════════════════════════════════════════
+            #  CODER ACTIONS
+            # ═══════════════════════════════════════════════════════════════
+            elif act == "semantic_search":
                 query = np.get("query", "")
                 hits  = search_repo(state.repo_root, query) if query else []
-                obs   = f"Semantic results for '{query}': {hits}" if hits else "No semantic matches."
+                obs   = f"Semantic matches for '{query}': {hits}" if hits else "No matches."
                 state.observations.append({"search": obs})
                 state.action_log.append(f"semantic_search: '{query}'")
 
             elif act == "exact_search":
                 needle = np.get("text", "")
                 hits   = []
-                root   = state.repo_root
-                for dirpath, _, fnames in os.walk(root):
+                for dirpath, _, fnames in os.walk(state.repo_root):
                     if any(d in dirpath for d in (".git", "__pycache__", ".operon", "venv")):
                         continue
                     for fname in fnames:
-                        fpath = os.path.join(dirpath, fname)
+                        fp = os.path.join(dirpath, fname)
                         try:
-                            with open(fpath, encoding="utf-8", errors="ignore") as fh:
+                            with open(fp, encoding="utf-8", errors="ignore") as fh:
                                 if needle in fh.read():
-                                    hits.append(os.path.relpath(fpath, root))
+                                    hits.append(os.path.relpath(fp, state.repo_root))
                         except Exception:
                             pass
-                obs = f"Exact matches for '{needle}': {hits}" if hits else f"No exact matches for '{needle}'."
+                obs = (
+                    f"Exact matches for '{needle}': {hits}"
+                    if hits else f"No exact matches for '{needle}'."
+                )
                 state.observations.append({"exact_search": obs})
                 state.action_log.append(f"exact_search: '{needle}'")
 
@@ -556,46 +550,58 @@ def run_agent(state):
                     and (term in p.name.lower() or term in str(p.relative_to(root)).lower())
                 ]
                 if found:
-                    state.observations.append({"find_file": f"Found {len(found)} files:\n" + "\n".join(found[:20])})
+                    obs = f"Found {len(found)} files:\n" + "\n".join(found[:20])
                 else:
-                    state.observations.append({"find_file": f"No files matching '{term}'. Try semantic_search."})
+                    obs = f"No files matching '{term}'. Try semantic_search."
+                state.observations.append({"find_file": obs})
+                state.action_log.append(f"find_file: '{term}'")
 
-            # ── READ ──────────────────────────────────────────────────────────
             elif act == "read_file":
-                raw_path = np.get("path") or np.get("file") or ""
+                raw_path = (
+                    np.get("path") or np.get("file") or np.get("file_path") or ""
+                )
                 if not raw_path:
                     state.observations.append({"error": "read_file requires 'path'."})
                     continue
 
-                # BUG 1 FIX: resolve before reading
-                resolved, found_flag, content = read_resolved(raw_path, state.repo_root, state)
-                if not found_flag:
-                    # Final attempt: check file_tree
-                    matches = [f for f in state.file_tree if Path(f).name.lower() == Path(raw_path).name.lower()]
+                # BUG1 FIX: fuzzy resolve before read
+                resolved, content, ok = read_resolved(raw_path, state.repo_root, state)
+
+                if not ok:
+                    # last try: file_tree exact name match
+                    matches = [
+                        f for f in state.file_tree
+                        if Path(f).name.lower() == Path(raw_path).name.lower()
+                    ]
                     if matches:
                         resolved = matches[0]
                         try:
-                            content   = (Path(state.repo_root) / resolved).read_text(encoding="utf-8", errors="ignore")
-                            found_flag = True
+                            content = (Path(state.repo_root) / resolved).read_text(
+                                encoding="utf-8", errors="ignore"
+                            )
+                            ok = True
                         except Exception:
                             pass
 
-                if not found_flag:
-                    state.observations.append({"error": f"File not found: '{raw_path}'. Use find_file to locate it."})
+                if not ok:
+                    state.observations.append({
+                        "error": (
+                            f"File not found: '{raw_path}'. "
+                            "Use find_file to locate it first."
+                        )
+                    })
                     state.action_log.append(f"FAILED read_file '{raw_path}'")
                     continue
 
                 state.context_buffer[resolved] = content
-                content_len = len(content) if isinstance(content, str) else 0
                 state.observations.append({
-                    "success": f"Loaded '{resolved}' ({content_len} chars).",
-                    "preview": content[:1500] if isinstance(content, str) else "",
+                    "success": f"Loaded '{resolved}' ({len(content)} chars).",
+                    "preview": content[:1500],
                 })
                 if resolved not in state.files_read:
                     state.files_read.append(resolved)
                 state.action_log.append(f"read_file '{resolved}'")
 
-            # ── CREATE FILE ───────────────────────────────────────────────────
             elif act == "create_file":
                 fp      = np.get("file_path") or np.get("file") or ""
                 content = np.get("initial_content", "")
@@ -611,13 +617,22 @@ def run_agent(state):
 
                 full = Path(state.repo_root) / fp
                 if full.exists():
-                    existing = full.read_text(encoding="utf-8")
+                    existing = full.read_text(encoding="utf-8", errors="ignore")
                     if existing.strip() == content.strip():
-                        state.observations.append({"success": f"{fp} already exists with identical content."})
-                        state.phase = "REVIEWER"
+                        state.observations.append({
+                            "success": f"{fp} already exists with identical content."
+                        })
                         state.context_buffer[fp] = existing
+                        if content.strip():
+                            state.phase = "REVIEWER"
+                            state.observations.append({
+                                "system": f"File {fp} already has the right content. REVIEWER: verify goal.",
+                                "file_preview": existing[:2000],
+                            })
                     else:
-                        state.observations.append({"error": f"{fp} already exists with different content. Use rewrite_function."})
+                        state.observations.append({
+                            "error": f"{fp} already exists with different content. Use rewrite_function instead."
+                        })
                     continue
 
                 full.parent.mkdir(parents=True, exist_ok=True)
@@ -625,78 +640,110 @@ def run_agent(state):
                 log.info(f"[green]📄 Created: {fp}[/green]")
 
                 ts = time.time()
-                state.diff_memory.setdefault(fp, []).append({
-                    "ts": ts, "before": "", "after": content,
-                    "diff": f"--- /dev/null\n+++ {fp}\n+" + "\n+".join(content.splitlines()),
-                })
+                diff_txt = "\n".join(
+                    f"+{l}" for l in content.splitlines()
+                )
+                state.diff_memory.setdefault(fp, []).append(
+                    {"ts": ts, "before": "", "after": content, "diff": diff_txt}
+                )
                 _persist_diff(state)
-
                 state.context_buffer[fp] = content
-                state.files_modified.append(fp)
+                if fp not in state.files_modified:
+                    state.files_modified.append(fp)
                 state.action_log.append(f"Created '{fp}'")
-                state.observations.append({
-                    "system": f"Created {fp}. REVIEWER: verify the goal is met.",
-                    "file_preview": content[:1500],
-                })
-                state.phase = "REVIEWER"
 
-            # ── REWRITE FUNCTION ──────────────────────────────────────────────
+                if content.strip():
+                    log.info("[cyan]🔄 → REVIEWER...[/cyan]")
+                    state.phase = "REVIEWER"
+                    state.observations.append({
+                        "system": f"File {fp} created. REVIEWER: verify goal is met.",
+                        "file_preview": content[:2000],
+                    })
+                else:
+                    state.observations.append({
+                        "system": f"Empty file {fp} created. CODER must write content."
+                    })
+
             elif act == "rewrite_function":
                 raw_file = np.get("file") or np.get("file_path") or ""
                 if not raw_file:
-                    state.observations.append({"error": "rewrite_function requires 'file'."})
+                    state.observations.append(
+                        {"error": "rewrite_function requires 'file'."}
+                    )
                     continue
 
-                # Snapshot before
-                resolved_pre, _, before_text = read_resolved(raw_file, state.repo_root, state)
-                if not before_text and not (Path(state.repo_root) / raw_file).exists():
-                    # Try file_tree lookup
-                    matches = [f for f in state.file_tree if Path(f).name.lower() == Path(raw_file).name.lower()]
-                    if matches:
-                        raw_file = matches[0]
+                # Resolve before snapshot (BUG1 FIX)
+                resolved_pre, _ = resolve_path(raw_file, state.repo_root, state)
+                full_pre = Path(state.repo_root) / resolved_pre
+                before   = (
+                    full_pre.read_text(encoding="utf-8", errors="ignore")
+                    if full_pre.exists() else ""
+                )
 
-                full_before = Path(state.repo_root) / raw_file
-                before_text = full_before.read_text(encoding="utf-8", errors="ignore") if full_before.exists() else ""
+                # PREVENT useless rewrite if cache matches file
+                cached = (
+                    state.context_buffer.get(resolved_pre) or
+                    state.context_buffer.get(raw_file)
+                )
+                if (cached and isinstance(cached, str)
+                        and cached.strip() == before.strip()
+                        and before.strip()):
+                    state.observations.append({
+                        "system": (
+                            f"{resolved_pre} already matches cached content. "
+                            "Skipping to REVIEWER."
+                        )
+                    })
+                    state.phase = "REVIEWER"
+                    continue
+
+                # Pass candidate content if provided
+                init = np.get("initial_content")
+                if init:
+                    state.context_buffer[resolved_pre] = init
 
                 result = _rewrite_function(state, raw_file)
 
-                # ── BUG 2 FIX: explicit noop handling ────────────────────────
+                # BUG2 FIX: noop = real error
                 if result.get("noop"):
                     state.noop_streak = getattr(state, "noop_streak", 0) + 1
                     log.warning(
-                        f"[yellow]⚠️  Noop rewrite ({state.noop_streak}/{NOOP_STREAK_MAX}): "
+                        f"[yellow]⚠️ NOOP rewrite ({state.noop_streak}/{NOOP_STREAK_MAX}): "
                         f"{result.get('message', '')}[/yellow]"
                     )
                     state.observations.append({
                         "error": (
-                            f"rewrite_function produced NO changes to '{raw_file}'. "
-                            "Your SEARCH block did not match or the replacement was identical. "
-                            "Read the file first and use an exact snippet from it."
+                            f"rewrite_function made NO changes to '{raw_file}'. "
+                            "Your SEARCH block did not match the actual file content. "
+                            "Read the file with read_file first, then use an exact "
+                            "snippet from what you see."
                         )
                     })
                     state.action_log.append(f"NOOP rewrite '{raw_file}'")
-
                     if state.noop_streak >= NOOP_STREAK_MAX:
-                        log.error("Too many noops — escalating to REVIEWER.")
+                        log.error("Too many noops → forcing REVIEWER.")
                         state.phase       = "REVIEWER"
                         state.noop_streak = 0
-                    continue  # Do NOT record as success, loop back
+                    continue
 
                 if result.get("success"):
                     resolved_path = result.get("file", raw_file)
                     full_after    = Path(state.repo_root) / resolved_path
-                    after_text    = full_after.read_text(encoding="utf-8", errors="ignore") if full_after.exists() else ""
+                    after         = (
+                        full_after.read_text(encoding="utf-8", errors="ignore")
+                        if full_after.exists() else ""
+                    )
 
                     ts       = time.time()
                     diff_txt = "\n".join(difflib.unified_diff(
-                        before_text.splitlines(keepends=True),
-                        after_text.splitlines(keepends=True),
+                        before.splitlines(keepends=True),
+                        after.splitlines(keepends=True),
                         fromfile=f"a/{resolved_path}",
                         tofile=f"b/{resolved_path}",
                         lineterm="",
                     ))
                     state.diff_memory.setdefault(resolved_path, []).append({
-                        "ts": ts, "before": before_text, "after": after_text, "diff": diff_txt,
+                        "ts": ts, "before": before, "after": after, "diff": diff_txt
                     })
                     _persist_diff(state)
 
@@ -704,113 +751,79 @@ def run_agent(state):
                     state.loop_counter          = 0
                     state.noop_streak           = 0
                     state.last_action_canonical = None
-                    if hasattr(state, "skip_counts"):
-                        state.skip_counts.clear()
 
-                    # Run step validator
-                    if _validate_step(state, resolved_path, before_text, after_text):
-                        log.info("[bold green]🎯 Validator PASSED — goal achieved.[/bold green]")
-                        commit_success(state.repo_root, f"Step {state.current_step + 1}: patched {resolved_path}")
+                    # Validate immediately
+                    if _validate_step(state, resolved_path, before, after):
+                        log.info("[bold green]🎯 Validator PASSED.[/bold green]")
+                        commit_success(
+                            state.repo_root,
+                            f"Step {state.current_step + 1}: patched {resolved_path}"
+                        )
                         state.done = True
                         return state
 
-                    # Normal REVIEWER handoff
                     if resolved_path not in state.files_modified:
                         state.files_modified.append(resolved_path)
-                    state.context_buffer[resolved_path] = after_text
+
+                    state.context_buffer = {resolved_path: after}
                     state.action_log.append(f"Patched '{resolved_path}'")
                     state.observations.append({
-                        "system":       f"Coder patched {resolved_path}. REVIEWER: verify the diff.",
-                        "file_preview": after_text[:1500],
-                        "diff_preview": diff_txt[:2000],
+                        "system": (
+                            f"Coder patched {resolved_path}. "
+                            "REVIEWER: look at file_preview and verify goal."
+                        ),
+                        "file_preview": after[:2000],
+                        "diff_preview": diff_txt[:1500],
                     })
-                    log.info(f"[cyan]🔄 Handing off to REVIEWER...[/cyan]")
+                    log.info("[cyan]🔄 → REVIEWER...[/cyan]")
                     state.phase = "REVIEWER"
 
-                    # Multi-file: mark this file done
-                    mf_queue = getattr(state, "multi_file_queue", [])
-                    mf_done  = getattr(state, "multi_file_done", [])
-                    if any(item.get("file") == resolved_path for item in mf_queue):
-                        if resolved_path not in mf_done:
-                            mf_done.append(resolved_path)
-                        state.multi_file_done = mf_done
+                    # Multi-file tracking
+                    mf = getattr(state, "multi_file_queue", [])
+                    md = getattr(state, "multi_file_done", [])
+                    if any(x.get("file") == resolved_path for x in mf):
+                        if resolved_path not in md:
+                            md.append(resolved_path)
+                        state.multi_file_done = md
 
                 else:
                     err = result.get("error", "Unknown error")
+                    hint = ""
+                    if "did not match" in err or "not found" in err.lower():
+                        hint = (
+                            " HINT: Use read_file first, then copy an exact "
+                            "snippet from the file into your SEARCH block."
+                        )
                     log.error(f"Patch failed: {err}")
+                    state.observations.append({"error": err + hint})
                     state.action_log.append(f"FAILED rewrite '{raw_file}': {err}")
-                    state.observations.append({"error": err})
 
-            # ── DELETE FILE ───────────────────────────────────────────────────
             elif act == "delete_file":
                 fp = np.get("file_path") or np.get("file") or ""
                 if not fp:
                     state.observations.append({"error": "delete_file requires 'file_path'."})
                     continue
-                resolved, found_flag = resolve_path(fp, state.repo_root, state)
-                if not found_flag:
+                resolved, ok = resolve_path(fp, state.repo_root, state)
+                if not ok:
                     state.observations.append({"error": f"Cannot delete: '{fp}' not found."})
                     continue
-                full = Path(state.repo_root) / resolved
                 try:
-                    full.unlink()
-                    state.files_modified.append(resolved)
+                    (Path(state.repo_root) / resolved).unlink()
+                    if resolved not in state.files_modified:
+                        state.files_modified.append(resolved)
                     state.action_log.append(f"Deleted '{resolved}'")
                     state.observations.append({"success": f"Deleted '{resolved}'."})
-                except Exception as e:
-                    state.observations.append({"error": f"Delete failed: {e}"})
-
-            # ── REVIEWER ACTIONS ──────────────────────────────────────────────
-            elif act == "approve_step":
-                state.action_log.append(f"✅ Approved step {state.current_step + 1}")
-                state.current_step += 1
-                state.reject_counts = {}
-                state.noop_streak   = 0
-                state.step_cooldown = 1
-
-                if state.current_step >= len(state.plan):
-                    log.info("[bold green]✅ All steps done. REVIEWER should finish.[/bold green]")
-                    state.observations.append({"system": "All steps complete. Use 'finish'."})
-                else:
-                    log.info(f"[yellow]👨‍💻 CODER: step {state.current_step + 1}[/yellow]")
-                    state.phase        = "CODER"
-                    state.observations = []
-
-            elif act == "reject_step":
-                feedback = np.get("feedback") or np.get("message") or "No feedback."
-                key      = f"step_{state.current_step}"
-                if not isinstance(state.reject_counts, dict):
-                    state.reject_counts = {}
-                state.reject_counts[key] = state.reject_counts.get(key, 0) + 1
-                count = state.reject_counts[key]
-                state.action_log.append(f"❌ Rejected step {state.current_step + 1} (×{count}): {feedback}")
-                state.observations.append({"reviewer_feedback": feedback})
-
-                if count >= REJECT_THRESHOLD:
-                    log.error(f"Step rejected {count} times — aborting.")
-                    rollback_files(state.repo_root, state.git_state, state.files_modified)
-                    state.done = True
-                    return state
-
-                state.step_cooldown = 2
-                state.phase         = "CODER"
-                log.info(f"[red]👨‍💻 Back to CODER for corrections (rejection {count}/{REJECT_THRESHOLD}).[/red]")
-
-            elif act == "finish":
-                msg = np.get("message") or np.get("commit_message") or "Task complete."
-                log.info(f"[bold green]✅ DONE: {msg}[/bold green]")
-                commit_success(state.repo_root, msg)
-                state.done = True
-                break
+                except Exception as ex:
+                    state.observations.append({"error": f"Delete failed: {ex}"})
 
             else:
                 log.warning(f"Unhandled action: {act}")
                 state.observations.append({"error": f"Unknown action '{act}'."})
 
         except Exception as exc:
-            log.exception(f"Unhandled exception during '{act}'")
+            log.exception(f"Exception during '{act}'")
             state.observations.append({"error": f"Exception in '{act}': {exc}"})
 
-        time.sleep(0.1)
+        time.sleep(0.15)
 
     return state
