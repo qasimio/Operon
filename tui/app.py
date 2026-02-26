@@ -178,7 +178,7 @@ class LLMSettingsPanel(Vertical):
             )
         except Exception as e:
             msg = f"[bold red]❌ Connection failed: {e}[/bold red]"
-        self.call_from_thread(self._set_status, msg)
+        cast("OperonUI", self.app).call_from_thread(self._set_status, msg)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
