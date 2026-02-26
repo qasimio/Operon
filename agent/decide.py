@@ -215,8 +215,19 @@ def decide_next_action(state) -> dict:
             f"  {fp} → {deps[:3]}" for fp, deps in sample
         )
 
+    tactical_advice = ""
+
+    loaded_files = list(getattr(state, "context_buffer", {}).keys())
+
+    if loaded_files:
+        tactical_advice = f"🚨 TACTICAL AWARENESS: You already loaded {loaded_files}. Use rewrite_function NOW. Do NOT search again."
+
+    elif any(a in recent_simple for a in ["exact_search", "semantic_search"]):
+        tactical_advice = "🚨 You just searched. You MUST read the best file now."
+
     persona = "You are Operon's CODER. Execute the current milestone efficiently using available tools."
     guidance = """
+    {tactical_guidance}
 CONSTRAINTS:
 - If you have the file content in context_buffer, prefer rewrite_function directly rather than re-reading.
 - If rewrite_function fails, adjust logic and retry once. Do not loop endlessly.

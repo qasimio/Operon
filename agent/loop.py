@@ -311,56 +311,92 @@ def _rewrite_function(state, code_to_modify: str, file_path: str) -> dict:
             full_path.write_text(new_text, encoding="utf-8")
             return {"success": True, "file": file_path, "message": "Deterministic import insertion applied."}
 
-     # ─────────────────────────────────────────────
-    # 3. LLM FULL-FILE rewrite (Operon-controlled diff)
+    # ─────────────────────────────────────────────
+    # 3. LLM SEARCH/REPLACE (Restored Stable Version)
     # ─────────────────────────────────────────────
 
-    prompt = f"""
-You are Operon.
-Rewrite the FULL file to satisfy the goal.
+    prompt = f"""You are Operon, an elite surgical code editor.
 
-GOAL:
-{state.goal}
+GOAL: {state.goal}
 
-Return ONLY the complete updated file.
-No markdown. No explanation.
-Preserve unrelated code exactly.
+CRITICAL CONTEXT:
+You are editing: `{file_path}`
+
+INSTRUCTIONS:
+1) Output raw SEARCH/REPLACE blocks only, using this exact format:
+
+<<<<<<< SEARCH
+[exact original lines to replace]
+=======
+[new lines]
+>>>>>>> REPLACE
+
+Rules:
+- To DELETE: leave REPLACE empty.
+- SEARCH must match content exactly (whitespace flexible).
+- If appending to EOF: leave SEARCH empty.
+- Multiple blocks allowed.
+
+CURRENT FILE CONTENT:
+{file_text}
 """
 
     try:
-        new_text = call_llm(prompt, require_json=False).strip()
+        raw_output = call_llm(prompt, require_json=False)
     except Exception as e:
         return {"success": False, "error": f"LLM call failed: {e}"}
 
-    if not new_text or new_text.strip() == file_text.strip():
-        return {"success": False, "error": "LLM produced no meaningful changes."}
+    try:
+        blocks = parse_search_replace(raw_output)
+    except Exception:
+        blocks = []
 
-    # Compute diff ourselves (LLM no longer responsible for SEARCH blocks)
-    diff_lines = list(difflib.unified_diff(
-        file_text.splitlines(keepends=True),
-        new_text.splitlines(keepends=True),
-        lineterm=""
-    ))
+    if not blocks:
+        return {"success": False, "error": "No SEARCH/REPLACE blocks returned."}
 
-    if not diff_lines:
-        return {"success": False, "error": "No diff detected after rewrite."}
+    preview_text = file_text
+    applied_any = False
+
+    for search_block, replace_block in blocks:
+        search_block = (search_block or "").rstrip("\n")
+        replace_block = (replace_block or "").rstrip("\n")
+
+        # STRICT attempt
+        patched = apply_patch(preview_text, search_block, replace_block)
+
+        # WHITESPACE NORMALIZED fallback (restore old robustness)
+        if patched is None:
+            words = search_block.split()
+            if words:
+                pattern = r'\s+'.join(re.escape(w) for w in words)
+                m = re.search(pattern, preview_text)
+                if m:
+                    patched = preview_text[:m.start()] + replace_block + preview_text[m.end():]
+
+        if patched is None:
+            return {"success": False, "error": "SEARCH block mismatch."}
+
+        if patched != preview_text:
+            preview_text = patched
+            applied_any = True
+
+    if not applied_any:
+        return {"success": False, "error": "Rewrite produced no effective change."}
 
     preview = {
         "file": file_path,
-        "search": "FULL FILE REWRITE",
-        "replace": new_text[:800]
+        "search": "SEARCH/REPLACE",
+        "replace": preview_text[:800]
     }
 
     if not ask_user_approval("rewrite_function", preview):
         return {"success": False, "error": "User rejected rewrite."}
 
-    if not check_syntax(new_text, str(file_path)):
+    if not check_syntax(preview_text, str(file_path)):
         return {"success": False, "error": "Syntax error after rewrite."}
 
-    full_path.write_text(new_text, encoding="utf-8")
-
-    return {"success": True, "file": file_path, "message": "Full-file rewrite applied."}  
-   
+    full_path.write_text(preview_text, encoding="utf-8")
+    return {"success": True, "file": file_path, "message": "Rewrite applied."}
 
 
 
