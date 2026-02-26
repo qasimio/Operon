@@ -1,36 +1,10 @@
-OPERON DIFF REPORT
+OPERON v3 DIFF REPORT
 ======================================================================
 
-FILE: main.py
+FILE: print.java
 ----------------------------------------------------------------------
 
-PATCH @ 2026-02-26T19:17:23.324341
-------------------------------
---- a/main.py
-+++ b/main.py
-@@ -1,6 +1,7 @@
- # main.py
-
- import sys
-
- from tui.app import OperonUI
-
-+import json
-
- 
-
- if __name__ == "__main__":
-
-     try:
-
-@@ -8,4 +9,4 @@
-         app.run()
-
-     except KeyboardInterrupt:
-
-         print("\nOperon shut down safely.")
-
--        sys.exit(0)
-+        sys.exit(0)
-
-
+PATCH @ 2026-02-26T20:53:38.740828
+--- /dev/null
++++ print.java
++
