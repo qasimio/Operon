@@ -311,63 +311,57 @@ def _rewrite_function(state, code_to_modify: str, file_path: str) -> dict:
             full_path.write_text(new_text, encoding="utf-8")
             return {"success": True, "file": file_path, "message": "Deterministic import insertion applied."}
 
-        # ─────────────────────────────────────────────
-    # 3. LLM rewrite (complex only)
+     # ─────────────────────────────────────────────
+    # 3. LLM FULL-FILE rewrite (Operon-controlled diff)
     # ─────────────────────────────────────────────
 
     prompt = f"""
 You are Operon.
-Return ONLY valid SEARCH/REPLACE blocks.
-No explanation. No markdown.
+Rewrite the FULL file to satisfy the goal.
 
 GOAL:
 {state.goal}
 
-FILE:
-{file_path}
-
-CURRENT FILE:
-{file_text}
+Return ONLY the complete updated file.
+No markdown. No explanation.
+Preserve unrelated code exactly.
 """
 
     try:
-        raw_output = call_llm(prompt, require_json=False)
+        new_text = call_llm(prompt, require_json=False).strip()
     except Exception as e:
         return {"success": False, "error": f"LLM call failed: {e}"}
 
-    try:
-        blocks = parse_search_replace(raw_output)
-    except Exception:
-        blocks = []
+    if not new_text or new_text.strip() == file_text.strip():
+        return {"success": False, "error": "LLM produced no meaningful changes."}
 
-    if not blocks:
-        return {"success": False, "error": "LLM produced no valid SEARCH/REPLACE blocks."}
+    # Compute diff ourselves (LLM no longer responsible for SEARCH blocks)
+    diff_lines = list(difflib.unified_diff(
+        file_text.splitlines(keepends=True),
+        new_text.splitlines(keepends=True),
+        lineterm=""
+    ))
 
-    preview_text = file_text
-
-    for search_block, replace_block in blocks:
-        patched = apply_patch(preview_text, search_block, replace_block)
-        if patched is None:
-            return {"success": False, "error": "SEARCH block mismatch."}
-        preview_text = patched
-
-    if preview_text == file_text:
-        return {"success": False, "error": "LLM rewrite resulted in no changes."}
+    if not diff_lines:
+        return {"success": False, "error": "No diff detected after rewrite."}
 
     preview = {
         "file": file_path,
-        "search": "LLM patch",
-        "replace": preview_text[:500]
+        "search": "FULL FILE REWRITE",
+        "replace": new_text[:800]
     }
 
     if not ask_user_approval("rewrite_function", preview):
-        return {"success": False, "error": "User rejected LLM rewrite."}
+        return {"success": False, "error": "User rejected rewrite."}
 
-    if not check_syntax(preview_text, str(file_path)):
+    if not check_syntax(new_text, str(file_path)):
         return {"success": False, "error": "Syntax error after rewrite."}
 
-    full_path.write_text(preview_text, encoding="utf-8")
-    return {"success": True, "file": file_path, "message": "LLM rewrite applied."}
+    full_path.write_text(new_text, encoding="utf-8")
+
+    return {"success": True, "file": file_path, "message": "Full-file rewrite applied."}  
+   
+
 
 
 # ─── Main agent loop ──────────────────────────────────────────────────────────

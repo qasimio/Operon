@@ -219,7 +219,7 @@ def decide_next_action(state) -> dict:
     guidance = """
 CONSTRAINTS:
 - If you have the file content in context_buffer, prefer rewrite_function directly rather than re-reading.
-- Avoid repeating the same search/query more than 3 times; if stuck, escalate to REVIEWER via reject_step.
+- If rewrite_function fails, adjust logic and retry once. Do not loop endlessly.
 - Always read a file before rewriting it unless you already have it in context.
 - Use the 4-level index (semantic_search, symbol lookup, dep graph, ast) to navigate large repos efficiently.
 - Output STRICT JSON: {"thought":"...","tool":{"action":"...", ...}}
