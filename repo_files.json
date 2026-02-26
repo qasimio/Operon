@@ -15,24 +15,14 @@
     "classes": [],
     "imports": []
   },
-  "test.js": {
-    "summary": "This file contains a function named `printHello` that logs the string \"hello Operon Multilingual\" to the console.",
-    "functions": [
-      {
-        "name": "printHello",
-        "start": 1,
-        "end": 3
-      }
-    ],
-    "classes": [],
-    "imports": []
-  },
   "readme.md": {
-    "summary": "This file is the README for Operon, a local-first autonomous coding agent designed to modify repository functions using deterministic loop control, slice-based rewriting, and human-approved commits.",
+    "summary": "This file is the README for the Operon project, which is an autonomous AI software engineer designed to navigate local repositories, reason about code, perform surgical file edits, verify its own work, and commit changes.",
     "functions": [],
     "classes": [],
     "imports": [
-      "in"
+      "json",
+      "os",
+      "to"
     ]
   },
   "repo_tree.json": {
@@ -64,7 +54,7 @@
     ]
   },
   "tools/universal_parser.py": {
-    "summary": "This file provides functions to parse and analyze code in multiple programming languages, including Python, JavaScript, and Java, by using the Tree-sitter library.",
+    "summary": "This file provides functions to parse, check syntax, and extract symbols from code in various programming languages using the Tree-sitter library.",
     "functions": [
       {
         "name": "get_parser",
@@ -104,7 +94,7 @@
     ]
   },
   "tools/fs_tools.py": {
-    "summary": "This file provides functions to read from and write to files, returning detailed success or error information.",
+    "summary": "This file provides functions to read from and write to files, handling paths relative to a repository root and providing detailed success or error responses.",
     "functions": [
       {
         "name": "read_file",
@@ -126,7 +116,7 @@
     ]
   },
   "tools/diff_engine.py": {
-    "summary": "This file contains functions to parse and apply patches to text, handling both search-and-replace and append/create operations while accounting for whitespace differences.",
+    "summary": "This file contains functions to parse search and replace blocks from text, normalize lines, and apply patches to original text by replacing matching blocks while handling leading/trailing whitespace differences.",
     "functions": [
       {
         "name": "parse_search_replace",
@@ -150,7 +140,7 @@
     ]
   },
   "tools/git_safety.py": {
-    "summary": "This file contains functions to safely run Git commands, set up a Git environment, rollback changes if a task fails, and commit successful work with a specific message prefix.",
+    "summary": "This file contains functions to safely run Git commands, set up a Git environment, rollback changes in case of failure, and commit successful work with a specific message prefix.",
     "functions": [
       {
         "name": "run_git",
@@ -182,7 +172,7 @@
     ]
   },
   "tools/build_brain.py": {
-    "summary": "This file initializes a repository brain by calling a function from another module.",
+    "summary": "This file initializes a repository brain by calling the `build_repo_brain` function from the `tools.repo_brain` module with a specified directory path and an LLM call function from the `agent.llm` module.",
     "functions": [],
     "classes": [],
     "imports": [
@@ -210,7 +200,7 @@
     ]
   },
   "tools/repo_brain.py": {
-    "summary": "This file, `repo_brain.py`, is a script that analyzes a repository by building a tree of its files, extracting symbols and imports from each file, and summarizing the content using a language model. It then saves this information in JSON files named `repo_tree.json` and `repo_files.json`.",
+    "summary": "Provides functions build_tree, extract_imports_regex, build_repo_brain and classes .",
     "functions": [
       {
         "name": "build_tree",
@@ -240,7 +230,7 @@
     ]
   },
   "tools/code_slice.py": {
-    "summary": "This file defines a function `load_function_slice` that retrieves the code snippet surrounding a specified function or class within a repository.",
+    "summary": "This file defines a function `load_function_slice` that loads and returns the code snippet surrounding a specified function or class within a repository.",
     "functions": [
       {
         "name": "load_function_slice",
@@ -297,24 +287,24 @@
     ]
   },
   "agent/tool_jail.py": {
-    "summary": "This file defines a function `validate_tool` that checks if a given tool action is allowed for a specified phase (CODER or REVIEWER) and if it includes all required parameters.",
+    "summary": "This file defines a function `validate_tool` that checks if a given tool action is allowed for a specific phase (CODER or REVIEWER) and if it includes all required parameters.",
     "functions": [
       {
         "name": "validate_tool",
-        "start": 18,
-        "end": 30
+        "start": 21,
+        "end": 33
       }
     ],
     "classes": [],
     "imports": []
   },
   "agent/decide.py": {
-    "summary": "Provides functions decide_next_action and classes .",
+    "summary": "This file contains a function `decide_next_action` that generates a prompt for an LLM to decide the next action based on the current state of the system, including the phase, action log, observations, and plan.",
     "functions": [
       {
         "name": "decide_next_action",
         "start": 7,
-        "end": 82
+        "end": 103
       }
     ],
     "classes": [],
@@ -328,7 +318,7 @@
     ]
   },
   "agent/planner.py": {
-    "summary": "This file contains a function `make_plan` that generates a high-level plan for achieving a user's goal by breaking it down into logical milestones, using a language model to provide the plan, and handling the response to ensure it is in the correct format.",
+    "summary": "This file contains a function `make_plan` that generates a high-level plan for achieving a given goal by breaking it down into logical milestones, using an LLM to process the goal and context from a repository.",
     "functions": [
       {
         "name": "make_plan",
@@ -363,7 +353,7 @@
     ]
   },
   "agent/logger.py": {
-    "summary": "This file defines a logging system that outputs logs to both a file and a user interface, with different formatting for each output.",
+    "summary": "This file defines a logging system that writes logs to both a file and a user interface, with different formatting for each.",
     "functions": [
       {
         "name": "emit",
@@ -390,22 +380,47 @@
     ]
   },
   "agent/loop.py": {
-    "summary": "This file contains functions and logic for detecting functions based on goals, rewriting code files based on those goals, and managing the process through user approval and logging.",
+    "summary": "This file contains functions and logic for managing state, normalizing payloads, resolving repository paths, and determining if an action is a no-op in an agent's loop.",
     "functions": [
       {
+        "name": "_ensure_state_fields",
+        "start": 20,
+        "end": 32
+      },
+      {
+        "name": "canonicalize_payload",
+        "start": 34,
+        "end": 38
+      },
+      {
+        "name": "normalize_action_payload",
+        "start": 40,
+        "end": 72
+      },
+      {
+        "name": "resolve_repo_path",
+        "start": 74,
+        "end": 111
+      },
+      {
+        "name": "is_noop_action",
+        "start": 113,
+        "end": 120
+      },
+      {
         "name": "_detect_function_from_goal",
-        "start": 14,
-        "end": 21
+        "start": 124,
+        "end": 131
       },
       {
         "name": "_rewrite_function",
-        "start": 23,
-        "end": 117
+        "start": 133,
+        "end": 250
       },
       {
         "name": "run_agent",
-        "start": 119,
-        "end": 287
+        "start": 253,
+        "end": 555
       }
     ],
     "classes": [],
@@ -422,6 +437,7 @@
       "check_syntax",
       "decide_next_action",
       "find_function",
+      "json",
       "log",
       "make_plan",
       "os",
@@ -442,7 +458,7 @@
     ]
   },
   "agent/llm.py": {
-    "summary": "This file contains a function `call_llm` that sends a prompt to a local language model server and returns the response.",
+    "summary": "This file contains a function `call_llm` that sends a prompt to a local language model server (llama.cpp/Ollama) and returns the model's response.",
     "functions": [
       {
         "name": "call_llm",
@@ -459,7 +475,7 @@
     ]
   },
   "agent/repo.py": {
-    "summary": "This file defines a function `build_repo_summary` that generates a summary of files in a repository, excluding files in the `.git` directory, and limits the output to a specified number of files.",
+    "summary": "This file defines a function `build_repo_summary` that takes a repository root directory and an optional maximum number of files to list, then returns a summary of the repository's files, excluding those in the `.git` directory.",
     "functions": [
       {
         "name": "build_repo_summary",
@@ -474,7 +490,7 @@
     ]
   },
   "tui/app.py": {
-    "summary": "This file defines a Textual User Interface (TUI) for an application called Operon, which includes features for displaying chat logs, input prompts, and a diff approval widget.",
+    "summary": "This file defines a Textual User Interface (TUI) for an application called Operon, which allows users to interact with an agent for software engineering tasks, including viewing and approving code changes.",
     "functions": [
       {
         "name": "__init__",
@@ -595,7 +611,7 @@
     ]
   },
   "runtime/state.py": {
-    "summary": "This file defines a data class `AgentState` that represents the state of an agent in a multi-agent system, including its goal, repository root, current phase, plan, and various logs and counters.",
+    "summary": "This file defines a data class `AgentState` that represents the state of an agent in a multi-agent system, including its goals, current phase, plan, and various logs and counters.",
     "functions": [],
     "classes": [
       {
