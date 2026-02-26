@@ -197,16 +197,7 @@ def _persist_diff_memory(state):
 
 
 # ─── Core rewrite engine ──────────────────────────────────────────────────────
-
 def _rewrite_function(state, code_to_modify: str, file_path: str) -> dict:
-    """
-    Upgraded surgical rewrite engine.
-
-    v2 changes:
-    - Passes 4-level context (symbol index + dep graph hint) into the LLM prompt
-    - Stores full before/after in diff_memory for the REVIEWER's LLM verifier
-    - Cleaner error messages with actionable hints
-    """
     from agent.approval import ask_user_approval
 
     full_path = Path(state.repo_root) / file_path
@@ -220,63 +211,86 @@ def _rewrite_function(state, code_to_modify: str, file_path: str) -> dict:
         return {"success": False, "error": f"Cannot read {file_path}: {e}"}
 
     original_text = file_text
+    goal = (state.goal or "").lower()
 
-    # ── Fast path: explicit line-range deletion ───────────────────────────────
-    line_delete = None
-    if isinstance(getattr(state, "goal", None), str):
-        m = re.search(r"\bdelete\s+lines?\s+(\d+)\s*[-–]\s*(\d+)\b", state.goal.lower())
-        if m:
-            try:
-                s, e = int(m.group(1)), int(m.group(2))
-                line_delete = (max(1, s), max(s, e))
-            except Exception:
-                pass
-
-    if line_delete:
-        start, end = line_delete
+    # ─────────────────────────────────────────────
+    # 1. Deterministic LINE RANGE deletion
+    # ─────────────────────────────────────────────
+    m = re.search(r"(\d+)\s*[-–]\s*(\d+)", goal)
+    if m and ("delete" in goal or "remove" in goal):
+        start = int(m.group(1))
+        end = int(m.group(2))
         lines = file_text.splitlines()
-        if start > len(lines):
-            return {"success": False, "error": f"Line deletion out of range: file has {len(lines)} lines."}
+
+        if not (1 <= start <= len(lines)):
+            return {"success": False, "error": "Line range invalid."}
+
         new_lines = lines[:start-1] + lines[end:]
         new_text = "\n".join(new_lines) + ("\n" if file_text.endswith("\n") else "")
-        snippet = "\n".join(lines[start-1:end])
-        preview = {"file": file_path, "search": f"lines {start}-{end}:\n{snippet}", "replace": ""}
+
+        if new_text == file_text:
+            return {"success": False, "error": "No change produced by line deletion."}
+
+        preview = {
+            "file": file_path,
+            "search": f"Delete lines {start}-{end}",
+            "replace": ""
+        }
+
         if not ask_user_approval("rewrite_function", preview):
-            return {"success": False, "error": "User rejected line-range deletion."}
-        if not check_syntax(new_text, str(file_path)):
-            return {"success": False, "error": f"Syntax error after deleting lines {start}-{end}."}
+            return {"success": False, "error": "User rejected line deletion."}
+
         full_path.write_text(new_text, encoding="utf-8")
-        return {"success": True, "file": file_path, "message": f"Deleted lines {start}-{end}."}
+        return {"success": True, "file": file_path, "message": "Deterministic line deletion applied."}
 
-    # ── Build 4-level context hint for LLM ───────────────────────────────────
-    context_hint = ""
-    from tools.repo_index import get_relevant_context
-    try:
-        hint = get_relevant_context(state, state.goal, max_files=2)
-        if hint:
-            context_hint = f"\n4-LEVEL CONTEXT:\n{hint[:600]}\n"
-    except Exception:
-        pass
+    # ─────────────────────────────────────────────
+    # 2. Deterministic IMPORT insertion
+    # ─────────────────────────────────────────────
+    imp = re.search(r"add import (.+)", goal)
+    if imp:
+        stmt = imp.group(1).strip()
+        if not stmt.startswith("import"):
+            stmt = f"import {stmt}"
 
-    # ── LLM prompt for SEARCH/REPLACE blocks ─────────────────────────────────
-    prompt = f"""You are Operon, an elite surgical code editor.
-GOAL: {state.goal}
-FILE: {file_path}
-{context_hint}
-INSTRUCTIONS:
-Output ONLY raw SEARCH/REPLACE blocks using this exact format (no markdown, no explanation):
+        lines = file_text.splitlines()
 
-<<<<<<< SEARCH
-[exact original lines to replace or delete]
-=======
-[new lines — leave empty to DELETE]
->>>>>>> REPLACE
+        if any(stmt in l for l in lines):
+            return {"success": False, "error": "Import already exists."}
 
-Rules:
-- SEARCH must exactly match lines in the file (whitespace-normalized match is attempted).
-- To delete: put original lines in SEARCH, leave REPLACE empty.
-- To append: leave SEARCH empty, put new code in REPLACE.
-- Multiple blocks allowed in sequence.
+        insert_idx = 0
+        for i, line in enumerate(lines):
+            if line.startswith("import") or line.startswith("from"):
+                insert_idx = i + 1
+
+        lines.insert(insert_idx, stmt)
+        new_text = "\n".join(lines) + "\n"
+
+        preview = {
+            "file": file_path,
+            "search": "",
+            "replace": stmt
+        }
+
+        if not ask_user_approval("rewrite_function", preview):
+            return {"success": False, "error": "User rejected import insertion."}
+
+        full_path.write_text(new_text, encoding="utf-8")
+        return {"success": True, "file": file_path, "message": "Deterministic import insertion applied."}
+
+    # ─────────────────────────────────────────────
+    # 3. LLM rewrite (complex only)
+    # ─────────────────────────────────────────────
+
+    prompt = f"""
+You are Operon.
+Return ONLY valid SEARCH/REPLACE blocks.
+No explanation. No markdown.
+
+GOAL:
+{state.goal}
+
+FILE:
+{file_path}
 
 CURRENT FILE:
 {file_text}
@@ -287,115 +301,39 @@ CURRENT FILE:
     except Exception as e:
         return {"success": False, "error": f"LLM call failed: {e}"}
 
-    blocks = []
-    if isinstance(raw_output, str) and raw_output.strip():
-        try:
-            blocks = parse_search_replace(raw_output)
-        except Exception:
-            pass
-
-    # Fallback: context_buffer full replacement
-    candidate = None
-    if not blocks:
-        candidate = state.context_buffer.get(file_path) or state.context_buffer.get(str(file_path))
-        if candidate and not isinstance(candidate, str):
-            candidate = str(candidate)
-
-    if not blocks and (not candidate or candidate.strip() == file_text.strip()):
-        return {
-        "success": False,
-        "error": "LLM produced no SEARCH/REPLACE blocks and no alternative content. No changes proposed."
-    }
-
-    # ── Dry-run all patches ───────────────────────────────────────────────────
-    preview_text = file_text
-    applied_any = False
-    preview_patches = []
-
-    if blocks:
-        for (search_block, replace_block) in blocks:
-            search_block = (search_block or "").rstrip("\n")
-            replace_block = (replace_block or "").rstrip("\n")
-            preview_patches.append({"search": search_block, "replace": replace_block})
-
-            if search_block and not replace_block:
-                if search_block in preview_text:
-                    preview_text = preview_text.replace(search_block, "", 1)
-                    applied_any = True
-                    continue
-                words = search_block.split()
-                if words:
-                    pattern = r'\s+'.join(re.escape(w) for w in words)
-                    mm = re.search(pattern, preview_text)
-                    if mm:
-                        preview_text = preview_text[:mm.start()] + preview_text[mm.end():]
-                        applied_any = True
-                        continue
-                return {"success": False, "error": "Deletion SEARCH block not found. Try a smaller or more unique snippet."}
-
-            if not preview_text.strip() and replace_block:
-                preview_text = replace_block + "\n"
-                applied_any = True
-                continue
-
-            patched = apply_patch(preview_text, search_block, replace_block)
-            if patched is None:
-                words = (search_block or "").split()
-                if words:
-                    pattern = r'\s+'.join(re.escape(w) for w in words)
-                    mm = re.search(pattern, preview_text)
-                    if mm:
-                        patched = preview_text[:mm.start()] + replace_block + preview_text[mm.end():]
-
-            if patched is None:
-                return {
-                    "success": False,
-                    "error": (
-                        "SEARCH block did not match file content. "
-                        "HINT: Use a smaller unique snippet or leave SEARCH empty to append."
-                    )
-                }
-            if patched != preview_text:
-                preview_text = patched
-                applied_any = True
-    else:
-        candidate_text = candidate or ""
-        if candidate_text.strip() and candidate_text.strip() != preview_text.strip():
-            preview_text = candidate_text
-            preview_patches.append({"search": file_text[:200].strip(), "replace": preview_text[:200].strip()})
-            applied_any = True
-
-    if not blocks and (not candidate or candidate.strip() == file_text.strip()):
-        return {
-        "success": False,
-        "error": "LLM produced no SEARCH/REPLACE blocks and no alternative content. No changes proposed."
-    }
-
-    # ── Build approval payload ────────────────────────────────────────────────
-    joined_search = "\n\n---\n\n".join(p["search"] for p in preview_patches if p.get("search") is not None)
-    joined_replace = "\n\n---\n\n".join(p["replace"] for p in preview_patches if p.get("replace") is not None)
-    approval_payload = {"file": file_path, "search": joined_search, "replace": joined_replace,
-                        "patches": preview_patches}
-
-    from agent.approval import ask_user_approval as _ask
-    if not _ask("rewrite_function", approval_payload):
-        return {"success": False, "error": "User rejected the code change."}
-
-    # ── Syntax check + write ──────────────────────────────────────────────────
-    if not check_syntax(preview_text, str(file_path)):
-        full_path.write_text(original_text, encoding="utf-8")
-        return {"success": False, "error": "Syntax error after applying patches. Rolled back."}
-
     try:
-        full_path.write_text(preview_text, encoding="utf-8")
-    except Exception as e:
-        try:
-            full_path.write_text(original_text, encoding="utf-8")
-        except Exception:
-            pass
-        return {"success": False, "error": f"Write failed: {e}"}
+        blocks = parse_search_replace(raw_output)
+    except Exception:
+        blocks = []
 
-    return {"success": True, "file": file_path, "message": "Rewrite applied."}
+    if not blocks:
+        return {"success": False, "error": "LLM produced no valid SEARCH/REPLACE blocks."}
+
+    preview_text = file_text
+
+    for search_block, replace_block in blocks:
+        patched = apply_patch(preview_text, search_block, replace_block)
+        if patched is None:
+            return {"success": False, "error": "SEARCH block mismatch."}
+        preview_text = patched
+
+    if preview_text == file_text:
+        return {"success": False, "error": "LLM rewrite resulted in no changes."}
+
+    preview = {
+        "file": file_path,
+        "search": "LLM patch",
+        "replace": preview_text[:500]
+    }
+
+    if not ask_user_approval("rewrite_function", preview):
+        return {"success": False, "error": "User rejected LLM rewrite."}
+
+    if not check_syntax(preview_text, str(file_path)):
+        return {"success": False, "error": "Syntax error after rewrite."}
+
+    full_path.write_text(preview_text, encoding="utf-8")
+    return {"success": True, "file": file_path, "message": "LLM rewrite applied."}
 
 
 # ─── Main agent loop ──────────────────────────────────────────────────────────
@@ -570,7 +508,12 @@ def run_agent(state):
             # ── SEARCH ACTIONS ────────────────────────────────────────────────
             if act == "semantic_search":
                 query = normalized_payload.get("query", "")
-                hits = search_repo(state.repo_root, query) if query else []
+                try:
+                    hits = search_repo(state.repo_root, query) if query else []
+                except Exception as e:
+                    log.warning(f"Semantic search failed: {e}")
+                    hits = []
+
                 obs = f"Semantic matches for '{query}': {hits}" if hits else "No semantic matches."
                 state.observations.append({"search": obs})
                 state.action_log.append(f"Semantic search: '{query}'.")
@@ -735,11 +678,17 @@ def run_agent(state):
                     if diff_text.strip() and target_file not in state.files_modified:
                         state.files_modified.append(target_file)
 
-                else:
-                    err = obs.get("error") or "Unknown error"
-                    log.error(f"Patch failed: {err}")
-                    state.action_log.append(f"FAILED patch on '{target_file}': {err}")
-                    state.observations.append({"error": err})
+                    else:
+                        err = obs.get("error") or "Unknown error"
+                        log.error(f"Patch failed: {err}")
+                        state.action_log.append(f"FAILED patch on '{target_file}': {err}")
+                        state.observations.append({"error": err})
+
+                        # Hard reset to prevent infinite rewrite loops
+                        state.loop_counter += 1
+                        if state.loop_counter >= 3:
+                            state.phase = "REVIEWER"
+                            state.loop_counter = 0
 
             # ── REVIEWER ACTIONS ──────────────────────────────────────────────
             elif act == "approve_step":

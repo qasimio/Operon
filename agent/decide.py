@@ -223,6 +223,7 @@ CONSTRAINTS:
 - Always read a file before rewriting it unless you already have it in context.
 - Use the 4-level index (semantic_search, symbol lookup, dep graph, ast) to navigate large repos efficiently.
 - Output STRICT JSON: {"thought":"...","tool":{"action":"...", ...}}
+- You are in CODER phase. You MUST NOT call approve_step, reject_step, or finish.
 """
     tools = """
 TOOLS:
