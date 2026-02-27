@@ -2,12 +2,9 @@
 import sys
 from tui.app import OperonUI
 
-if __name__ == "__main__":
-    try:
-        OperonUI().run()
-    except KeyboardInterrupt:
-        print("\nOperon shut down safely.")
-        sys.exit(0)
+def count_to_100():
+    for i in range(101):
+        print(i)
 
 def print_universal_operon():
     print("Universal Operon")
