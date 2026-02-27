@@ -56,3 +56,5 @@ __pycache__/
 # Ignored lock files (optional, your preference)
 poetry.lock
 pipfile.lock
+
+.llm_config.json

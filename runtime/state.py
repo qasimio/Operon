@@ -1,4 +1,4 @@
-# runtime/state.py — Operon v3
+# runtime/state.py — Operon v5
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
 
@@ -37,26 +37,29 @@ class AgentState:
     search_counts: Dict[str, Any] = field(default_factory=dict)
     step_cooldown: int = 0
     reject_threshold: int = 3
-    noop_streak: int = 0    # consecutive "no change" rewrites → eject after 3
+    noop_streak: int = 0
 
     # ── Memory / context ─────────────────────────────────────────────────────
-    context_buffer: Dict[str, str] = field(default_factory=dict)      # rel_path → content
-    diff_memory: Dict[str, List[Dict]] = field(default_factory=dict)  # rel_path → patches
+    context_buffer: Dict[str, str] = field(default_factory=dict)
+    diff_memory: Dict[str, List[Dict]] = field(default_factory=dict)
     git_state: Dict[str, str] = field(default_factory=dict)
 
     # ── 4-Level intelligence index ────────────────────────────────────────────
     # L1 lives in LanceDB (semantic_memory.py) — not stored here
-    # L2: symbol index  { rel_path: {functions:[{name,start,end}], classes:[...]} }
+    # L2: symbol index  { rel_path: {functions:[...], classes:[...], ...} }
     symbol_index: Dict[str, Any] = field(default_factory=dict)
     # L3: forward dep graph  { rel_path: [imported_rel_paths] }
     dep_graph: Dict[str, List[str]] = field(default_factory=dict)
     # L3b: reverse dep  { rel_path: [files_that_import_it] }
     rev_dep: Dict[str, List[str]] = field(default_factory=dict)
-    # file tree cache (sorted list of rel paths)
+    # file tree cache
     file_tree: List[str] = field(default_factory=list)
 
+    # ── v5: Full symbol graph (from symbol_graph.py) ─────────────────────────
+    # Full graph including cross-refs — built once at startup
+    symbol_graph_full: Optional[Dict] = None
+
     # ── Multi-file work queue ─────────────────────────────────────────────────
-    # Each item: {"file": rel_path, "action": "rewrite"|"create", "description": str}
     multi_file_queue: List[Dict] = field(default_factory=list)
     multi_file_done: List[str] = field(default_factory=list)
 
