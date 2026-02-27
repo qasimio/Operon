@@ -1,180 +1,216 @@
-# agent/decide.py — Operon v3.1
+# agent/decide.py — Operon v4
 """
-Rebuilt from the working original decide.py with these additions:
-
-KEY FIX (from log analysis):
-  - REVIEWER no longer calls decide_next_action in a hot loop.
-    When the REVIEWER has already rejected N times and "finish" is blocked,
-    the loop would spin calling decide() infinitely because decide() kept
-    calling the LLM synchronously on each iteration.
-    
-    Solution: The REVIEWER returns a structured decision with explicit
-    escalation logic. After 3 rejections the loop forces state.done=True
-    via an abort path — it does NOT rely on "finish" getting through tool_jail.
-
-  - TACTICAL prompt injection kept from your working version:
-    "You have [files] loaded. Use rewrite_function NOW."
-    This is what stopped the infinite read_file loop.
-
-  - File context preview included in REVIEWER prompt so it can actually
-    judge the content instead of hallucinating "file is unmodified."
+REVIEWER is deterministic-first.
+  - Reads file from DISK, not cache.
+  - Checks diff_memory hash to confirm change happened before calling LLM.
+  - LLM sees actual current file content for goal-satisfaction check.
+CODER gets full file preview for verbatim SEARCH block copying.
 """
+from __future__ import annotations
 
 import json
 import re
+from pathlib import Path
+
 from agent.llm import call_llm
 from agent.logger import log
 
 
+def _read_disk(state, file_path: str) -> str:
+    if not file_path:
+        return ""
+    try:
+        from tools.path_resolver import resolve_path
+        resolved, found = resolve_path(file_path, state.repo_root, state)
+        if found:
+            return (Path(state.repo_root) / resolved).read_text(
+                encoding="utf-8", errors="ignore"
+            )
+    except Exception:
+        pass
+    return ""
+
+
+def _reviewer_deterministic(state) -> tuple[str, str]:
+    """
+    Returns (decision, detail).
+    decision: "reject" | "ask_llm"
+    detail:   reason string | file_path for evidence
+    """
+    files_modified = getattr(state, "files_modified", [])
+    diff_memory    = getattr(state, "diff_memory", {})
+
+    if not files_modified:
+        return "reject", "No files have been modified yet."
+
+    for fp in files_modified:
+        if fp in diff_memory and diff_memory[fp]:
+            last         = diff_memory[fp][-1]
+            before_snap  = last.get("before", "")
+            current      = _read_disk(state, fp)
+            if current and current.strip() != before_snap.strip():
+                return "ask_llm", fp
+            elif current and current.strip() == before_snap.strip():
+                return "reject", (
+                    f"File '{fp}' is identical to its pre-modification snapshot. "
+                    "The rewrite produced no net change."
+                )
+
+    # files_modified set but no diff_memory (e.g. create_file)
+    return "ask_llm", files_modified[0]
+
+
 def decide_next_action(state) -> dict:
-    phase       = getattr(state, "phase", "CODER")
-    action_log  = getattr(state, "action_log", [])
-    history     = (
+    phase        = getattr(state, "phase", "CODER")
+    action_log   = getattr(state, "action_log", [])
+    observations = getattr(state, "observations", [])
+    history      = (
         "\n".join(f"{i+1}. {e}" for i, e in enumerate(action_log[-8:]))
         if action_log else "No actions yet."
     )
-    observations = getattr(state, "observations", [])
     recent_obs   = "\n".join(str(o) for o in observations[-4:]) if observations else "None"
-
     plan_list    = getattr(state, "plan", [])
     step_idx     = getattr(state, "current_step", 0)
-    step_text    = plan_list[step_idx] if step_idx < len(plan_list) else "All steps complete."
-    loaded_files = list(getattr(state, "context_buffer", {}).keys())
+    step_text    = (
+        plan_list[step_idx] if step_idx < len(plan_list) else "All steps complete."
+    )
+    loaded       = list(getattr(state, "context_buffer", {}).keys())
 
-    # ── CODER ─────────────────────────────────────────────────────────────────
+    # ── CODER ─────────────────────────────────────────────────────────────
     if phase == "CODER":
-        # Tactical injection — most important anti-loop mechanism
         tactical = ""
-        if loaded_files:
+        if loaded:
             tactical = (
-                f"🚨 TACTICAL: You have {loaded_files} loaded in memory. "
-                "Call 'rewrite_function' NOW with the correct file. "
-                "Do NOT search or read again unless you have a specific reason."
+                f"🚨 FILES LOADED: {loaded}\n"
+                "→ Call rewrite_function NOW. Do NOT search or read again.\n"
+                "→ SEARCH block must be VERBATIM from the file preview below."
             )
-        elif any(a in history for a in ("exact_search", "semantic_search", "find_file")):
+        elif any(kw in history for kw in
+                 ("find_file", "exact_search", "semantic_search")):
             tactical = (
-                "🚨 TACTICAL: You just searched. "
-                "Now call 'read_file' on the best result, then 'rewrite_function'."
+                "🚨 You searched already. Call read_file on the best result.\n"
+                "→ After reading, call rewrite_function immediately."
             )
 
-        # Include a compact file preview if available
         file_preview = ""
         ctx = getattr(state, "context_buffer", {})
         if ctx:
-            first_file = next(iter(ctx))
-            content    = ctx[first_file]
-            file_preview = (
-                f"\n[FILE IN MEMORY: {first_file}]\n"
-                f"{content[:1200]}"
-                f"{'...(truncated)' if len(content) > 1200 else ''}\n"
+            for fp, content in list(ctx.items())[:2]:
+                c = str(content) if not isinstance(content, str) else content
+                file_preview += (
+                    f"\n[FILE: {fp}]\n"
+                    f"{c[:3000]}"
+                    f"\n{'[...truncated]' if len(c) > 3000 else ''}\n"
+                    f"[END: {fp}]\n"
+                )
+
+        ctx_hint = ""
+        try:
+            from tools.repo_index import get_context_for_query
+            ctx_hint = get_context_for_query(state, state.goal, max_chars=300)
+        except Exception:
+            pass
+
+        mf_hint = ""
+        pending = [
+            x for x in getattr(state, "multi_file_queue", [])
+            if x.get("file") not in getattr(state, "multi_file_done", [])
+        ]
+        if pending:
+            mf_hint = "PENDING FILES:\n" + "\n".join(
+                f"  {x['file']}: {x.get('description','')}"
+                for x in pending[:4]
             )
 
-        tools = """\
-TOOLS (output exactly one):
-1. {"action": "find_file",        "search_term": "filename or unique string"}
-2. {"action": "read_file",        "path": "exact/relative/path.ext"}
-3. {"action": "exact_search",     "text": "exact token to grep for"}
-4. {"action": "semantic_search",  "query": "conceptual description"}
-5. {"action": "rewrite_function", "file": "exact/relative/path.ext"}
-6. {"action": "create_file",      "file_path": "new/file.ext", "initial_content": "..."}"""
+        prompt = f"""You are Operon's CODER. Execute the current step.
 
-        prompt = f"""You are Operon's elite CODER. Execute the current milestone.
-
-[OVERALL GOAL]
-{state.goal}
-
-[CURRENT MILESTONE]
-{step_text}
-
-[LOADED FILES]
-{loaded_files if loaded_files else "None — you need to find and read a file first."}
+[GOAL] {state.goal}
+[STEP] {step_text}
+{('[CONTEXT]\n' + ctx_hint) if ctx_hint else ''}
 {file_preview}
-[RECENT ACTIONS]
+{mf_hint}
+[ACTIONS SO FAR]
 {history}
-
-[SYSTEM OBSERVATIONS]
+[OBSERVATIONS]
 {recent_obs}
-
 {tactical}
 
-{tools}
+TOOLS:
+1. {{"action":"find_file",        "search_term":"filename"}}
+2. {{"action":"read_file",        "path":"exact/path.ext"}}
+3. {{"action":"exact_search",     "text":"exact token"}}
+4. {{"action":"semantic_search",  "query":"description"}}
+5. {{"action":"rewrite_function", "file":"exact/path.ext"}}
+6. {{"action":"create_file",      "file_path":"new/file.ext", "initial_content":"..."}}
 
-REQUIREMENT: Output STRICT JSON. No markdown. No extra text.
-{{
-    "thought": "My step-by-step reasoning.",
-    "tool": {{"action": "...", ...}}
-}}"""
+RULES: 3 steps max: find→read→rewrite. If file preview shown: rewrite NOW.
+SEARCH must be VERBATIM from file preview.
 
-    # ── REVIEWER ──────────────────────────────────────────────────────────────
+Output STRICT JSON: {{"thought":"...","tool":{{"action":"...",...}}}}"""
+
+    # ── REVIEWER ──────────────────────────────────────────────────────────
     else:
-        files_modified = getattr(state, "files_modified", [])
-        diff_memory    = getattr(state, "diff_memory", {})
+        det_decision, det_detail = _reviewer_deterministic(state)
 
-        # Build evidence for reviewer
-        evidence = ""
-        ctx = getattr(state, "context_buffer", {})
-        if ctx:
-            for fp, content in list(ctx.items())[:2]:
-                evidence += f"\n[FILE: {fp}]\n{str(content)[:1200]}\n"
-        if diff_memory:
-            for fp, patches in list(diff_memory.items())[:2]:
-                if patches:
-                    evidence += f"\n[DIFF: {fp}]\n{patches[-1].get('diff','')[:600]}\n"
+        if det_decision == "reject":
+            log.debug(f"REVIEWER det-REJECT: {det_detail}")
+            return {
+                "thought": f"Deterministic: {det_detail}",
+                "tool": {"action": "reject_step", "feedback": det_detail},
+            }
 
-        tools = """\
-TOOLS (output exactly one):
-1. {"action": "approve_step",  "message": "Why this step is complete"}
-2. {"action": "reject_step",   "feedback": "Exactly what the coder must fix"}
-3. {"action": "finish",        "commit_message": "Short git commit summary"}"""
+        # Confirmed change — read file from disk for LLM
+        evidence_fp      = det_detail
+        current_content  = _read_disk(state, evidence_fp)
+        diff_memory      = getattr(state, "diff_memory", {})
+        diff_evidence    = ""
+        if evidence_fp in diff_memory and diff_memory[evidence_fp]:
+            diff_evidence = diff_memory[evidence_fp][-1].get("diff", "")[:1000]
 
-        prompt = f"""You are Operon's STRICT CODE REVIEWER.
+        files_modified  = getattr(state, "files_modified", [])
+        step_count_all  = len(plan_list)
+        at_last         = step_idx >= step_count_all - 1
 
-[OVERALL GOAL]
-{state.goal}
+        prompt = f"""You are Operon's CODE REVIEWER. A change was confirmed on disk.
 
-[CURRENT MILESTONE TO VERIFY]
-{step_text}
+[GOAL] {state.goal}
+[STEP {step_idx+1}/{step_count_all}] {step_text}
+[FILES MODIFIED] {files_modified}
 
-[FILES MODIFIED SO FAR]
-{files_modified if files_modified else "None"}
+[CURRENT FILE ON DISK: {evidence_fp}]
+{current_content[:3000] if current_content else '(unreadable)'}
+{'[...truncated]' if len(current_content or '') > 3000 else ''}
 
-[FILE CONTENT / DIFF EVIDENCE]
-{evidence if evidence else "No file content loaded yet."}
+[DIFF]
+{diff_evidence or '(no diff)'}
 
 [RECENT ACTIONS]
 {history}
-
-[SYSTEM OBSERVATIONS]
+[OBSERVATIONS]
 {recent_obs}
 
-REVIEWER RULES:
-- If evidence shows the file was successfully changed to meet the milestone: use approve_step.
-- If no files were modified or the change is wrong: use reject_step with specific instructions.
-- If ALL plan steps are complete: use finish.
-- BE GENEROUS: any meaningful progress toward the goal = approve.
-- Do NOT reject if the file preview matches the goal.
+RULES:
+- A change HAS occurred (system confirmed). Judge if it satisfies the milestone.
+- Be GENEROUS: meaningful progress = approve.
+- {"Use 'finish' — this is the LAST step." if at_last else "Use 'approve_step'. Do NOT finish yet."}
+- Judge ONLY from file content above.
 
-{tools}
+TOOLS:
+1. {{"action":"approve_step",  "message":"why"}}
+2. {{"action":"reject_step",   "feedback":"what to fix"}}
+3. {{"action":"finish",        "commit_message":"summary"}}
 
-Output STRICT JSON only:
-{{
-    "thought": "My analysis of the evidence.",
-    "tool": {{"action": "...", ...}}
-}}"""
+Output STRICT JSON: {{"thought":"...","tool":{{"action":"...",...}}}}"""
 
     log.debug(f"Calling LLM for {phase}...")
-    raw_output = call_llm(prompt, require_json=False)
-
-    # Robust JSON extraction
-    clean = re.sub(
-        r"```(?:json)?\s*(.*?)\s*```", r"\1", raw_output, flags=re.DOTALL
-    ).strip()
+    raw   = call_llm(prompt, require_json=False)
+    clean = re.sub(r"```(?:json)?\s*(.*?)\s*```", r"\1", raw, flags=re.DOTALL).strip()
 
     data = None
     try:
         data = json.loads(clean)
     except Exception:
-        m = re.search(r"(\{(?:.|\n)*\})", clean)
+        m = re.search(r"(\{(?:.|\n)*?\})", clean)
         if m:
             try:
                 data = json.loads(m.group(1))
@@ -182,15 +218,20 @@ Output STRICT JSON only:
                 pass
 
     if not isinstance(data, dict):
-        log.error(f"JSON parse failed. Raw: {raw_output[:200]}")
+        log.error(f"JSON parse error ({phase}): {raw[:200]}")
+        if phase == "REVIEWER":
+            return {
+                "thought": "Parse error — safe reject.",
+                "tool": {
+                    "action":   "reject_step",
+                    "feedback": "LLM JSON parse failed. Coder: re-attempt.",
+                },
+            }
         return {"thought": "JSON failed", "tool": {"action": "error"}}
 
-    # Normalize shapes
     if "tool" not in data and "action" in data:
         return {"thought": data.get("thought", ""), "tool": data}
     if "tool" not in data:
         if any(k in data for k in ("action", "file", "path", "query", "text")):
             return {"thought": data.get("thought", ""), "tool": data}
-        return {"thought": data.get("thought", ""), "tool": data.get("tool", data)}
-
     return data
