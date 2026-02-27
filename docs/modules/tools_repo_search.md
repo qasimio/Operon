@@ -3,7 +3,7 @@
 
 ## Overview
 
-This file contains a function `search_repo` that searches for a query within a repository. It first attempts to use a semantic search function from `tools.semantic_memory`, but if that fails, it falls back to using `grep` to search for exact matches in file contents, excluding files in `.git` and `.operon` directories. The function returns up to 5 matching file paths.
+This file defines a function `search_repo` that searches for a query within a repository. It first attempts to use a semantic search function from `tools.semantic_memory`, but if that fails, it falls back to using `grep` to search for exact matches in file contents, excluding files in directories `.git` and `.operon`. The function returns up to 5 matching file paths.
 
 
 ## Stats

@@ -3,7 +3,7 @@
 
 ## Overview
 
-This file, `tools/function_locator.py`, is part of the Operon v3 software. It defines a function `find_function` that searches a repository for a specified function or class by name. The function returns the relative path to the file containing the function or class, along with the start and end positions of the function or class within the file. It ignores certain directories and file types during the search.
+This file, `tools/function_locator.py`, is part of the Operon v3 software suite. It provides a function `find_function` that searches a repository for a specified function or class by name. The function returns the relative path to the file containing the function or class, along with the start and end positions of the function or class within the file. It ignores certain directories and file types during the search.
 
 
 ## Stats

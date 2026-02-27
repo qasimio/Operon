@@ -3,7 +3,7 @@
 
 ## Overview
 
-This file defines a function `load_function_slice` that takes a repository root, a function name, and an optional context size as input. It uses the `find_function` function from the `tools.function_locator` module to locate the function's position in the repository. If the function is found, it reads the file, extracts the lines surrounding the function based on the specified context, and returns a dictionary containing the file path, start and end line numbers, slice start and end line numbers, and the code snippet. If the function is not found or the file does not exist, it returns `None`.
+This file defines a function `load_function_slice` that takes a repository root, a function name, and an optional context size as input. It uses the `find_function` function from `tools.function_locator` to locate the function's position in the repository. If the function is found, it reads the file, extracts the lines surrounding the function based on the specified context, and returns a dictionary containing the file path, start and end line numbers, slice start and end line numbers, and the code snippet. If the function is not found or the file does not exist, it returns `None`.
 
 
 ## Stats

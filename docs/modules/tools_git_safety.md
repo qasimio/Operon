@@ -12,7 +12,7 @@ v3 solution:
 
 ## Overview
 
-This file, `tools/git_safety.py`, is designed to enhance the safety of Git operations when using an AI tool like Operon. It ensures that uncommitted changes made by the user are preserved during the AI's operations. The script checks if the current directory is a Git repository, stashes any uncommitted changes, and then tracks only the files that the AI modifies. On rollback, it restores only the AI's modified files, leaving the user's pre-existing uncommitted work intact.
+This file, `tools/git_safety.py`, is designed to enhance the safety of Git operations by ensuring that uncommitted changes are preserved during certain operations. It does this by stashing any existing user changes before performing operations that could potentially nuke uncommitted work. After the operation, it restores only the files that were modified by the operation, leaving the user's pre-existing uncommitted work intact.
 
 
 ## Stats

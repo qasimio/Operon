@@ -17,7 +17,7 @@ Schema:
 
 ## Overview
 
-This file, `tools/symbol_graph.py`, is part of the Operon v5 software and is responsible for creating and managing a persistent, cross-file symbol graph for a repository. The symbol graph stores information about symbols (functions, classes, variables, etc.) in each file, as well as cross-file references between these symbols. The graph is persisted in a JSON file located at `.operon/symbol_graph.json`. The file includes functions for loading the symbol graph, building it, querying for usages of symbols, and finding definitions of symbols.
+This file, `tools/symbol_graph.py`, is part of the Operon v5 software and is responsible for creating and managing a persistent, cross-file symbol graph for a repository. The symbol graph stores information about symbols (functions, classes, variables, etc.) in each file, as well as cross-file references between these symbols. The graph is persisted in a JSON file located at `.operon/symbol_graph.json`. The file includes functions for loading, building, querying, and finding definitions within the symbol graph.
 
 
 ## Stats

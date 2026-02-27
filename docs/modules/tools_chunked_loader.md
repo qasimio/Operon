@@ -13,7 +13,7 @@ Strategy:
 
 ## Overview
 
-This file, `tools/chunked_loader.py`, is part of the Operon v5 system and is designed for semantic chunked loading of code. It provides a public API to load relevant code blocks based on a query, ensuring that only the minimum necessary code is loaded. The system uses a combination of symbol-level extraction, dependency-aware inclusion, relevance ranking based on cosine similarity, and budget-aware assembly to efficiently load code chunks.
+This file, `tools/chunked_loader.py`, is part of the Operon v5 system and is designed for efficient code loading and retrieval. It provides functions to load specific code blocks relevant to a query, considering dependencies and relevance ranking. The public API includes `load_symbol_chunk`, `load_context_for_query`, and `get_relevant_chunks`, which help in assembling code chunks up to a specified character limit based on relevance.
 
 
 ## Stats

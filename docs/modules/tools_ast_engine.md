@@ -12,7 +12,7 @@ Public API:
 
 ## Overview
 
-This file contains an AST-based intelligence engine for Python code. It provides functions to rename symbols, find all usages of a symbol, migrate function signatures, summarize code blocks, extract code chunks, and explain symbols. The engine uses Python's `ast` standard library for parsing and manipulating the abstract syntax tree of the code.
+The `tools/ast_engine.py` file is part of the Operon v5 project and provides an AST-based intelligence engine for various code operations. It includes functions for renaming symbols, finding all usages of a symbol, migrating function signatures, summarizing code blocks, extracting code chunks, and explaining symbols. The file uses Python's `ast` standard library for parsing and manipulating abstract syntax trees.
 
 
 ## Stats
@@ -87,7 +87,7 @@ This file contains an AST-based intelligence engine for Python code. It provides
 
 - **Lines:** 45–50
 
-**Summary:** The `RenameResult` class encapsulates the outcome of a renaming operation, storing the old and new names, a list of edits made, any errors encountered, and a flag indicating whether the renaming was successfully applied.
+**Summary:** The `RenameResult` class encapsulates the outcome of a renaming operation, storing the old and new names, a list of edits made, any errors encountered, and a flag indicating whether the renaming was applied.
 
 
 ### `class UsageEntry`
@@ -101,7 +101,7 @@ This file contains an AST-based intelligence engine for Python code. It provides
 
 - **Lines:** 62–66
 
-**Summary:** MigrateResult encapsulates the outcome of a migration, including the function name, a list of edit call sites, a list of errors, and a boolean indicating whether the migration was applied.
+**Summary:** MigrateResult encapsulates the outcome of a migration, storing the function name, a list of edit call sites, a list of errors, and a boolean indicating whether the migration was applied.
 
 
 ## Functions

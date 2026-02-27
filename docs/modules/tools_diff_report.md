@@ -3,7 +3,7 @@
 
 ## Overview
 
-This file contains two functions, `dump_diff_report_from_json` and `dump_diff_report_from_repo`, which generate a human-readable diff report from JSON data. The `dump_diff_report_from_json` function reads a JSON file containing diff information and writes a formatted report to a specified output file. The `dump_diff_report_from_repo` function retrieves the diff JSON from a specific path within a repository and generates a report using the first function.
+This file contains two functions, `dump_diff_report_from_json` and `dump_diff_report_from_repo`, which generate a human-readable diff report from JSON data. The `dump_diff_report_from_json` function reads JSON data from a specified path, processes it, and writes a formatted diff report to an output file. The `dump_diff_report_from_repo` function is a convenience wrapper that retrieves the JSON data from a default location within a repository and generates the diff report accordingly.
 
 
 ## Stats

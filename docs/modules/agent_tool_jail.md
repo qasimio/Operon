@@ -5,7 +5,7 @@
 
 ## Overview
 
-This file, `agent/tool_jail.py`, is part of Operon v4 and is responsible for enforcing tool permissions and managing model-switch support. It defines a set of tools available to coders and reviewers, validates actions based on the current phase (e.g., coding or review), checks for required parameters, and implements throttling for repeated search actions to prevent abuse.
+This file defines permissions and requirements for tools in different phases (CODER and REVIEWER) and includes validation logic to ensure that actions are performed correctly and within allowed limits.
 
 
 ## Stats

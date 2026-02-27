@@ -3,7 +3,7 @@
 
 ## Overview
 
-This file, `repo_brain.py`, is designed to analyze a repository by building a tree of its files and extracting information about the files, such as their structure, imports, and a preview of their content. It uses a universal parser to extract symbols and then generates a summary of each file using a language model. The results are stored in JSON files named `repo_tree.json` and `repo_files.json`.
+This file, `repo_brain.py`, is part of a tool that analyzes a repository to build a mental model of its structure and contents. It walks through the repository, ignoring specified directories and files, and extracts information about functions, classes, and imports from Python, Markdown, and other text files. It then uses a language model to generate a summary of what each file does in plain English.
 
 
 ## Stats

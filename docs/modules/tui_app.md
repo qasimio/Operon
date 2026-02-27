@@ -3,7 +3,7 @@
 
 ## Overview
 
-This file, `tui/app.py`, is part of an application that provides a text user interface (TUI) for interacting with an agent. It imports various modules and classes from the `textual` and `rich` libraries to create a user interface for configuring and running an agent. The file includes a list of providers for language models and default settings for each provider.
+This file is part of the Operon v3.1 application, which is a text user interface (TUI) for interacting with language models. It includes settings for different providers of language models, such as OpenAI, Anthropic, and local models, and provides a user interface for selecting and configuring these providers.
 
 
 ## Stats
@@ -69,7 +69,7 @@ This file, `tui/app.py`, is part of an application that provides a text user int
 - **Methods:** `compose`, `on_mount`, `_load_current`, `_update_guide`, `on_select_changed`, `_set_status`, `on_button_pressed`, `_do_save`, `_test_connection`
 - **Inherits:** `Vertical`
 
-**Summary:** The `LLMSettingsPanel` class is a vertical layout for configuring language model settings, including provider, model, and API key, with a title and input fields for each setting.
+**Summary:** The `LLMSettingsPanel` class is a vertical layout panel for configuring language model provider settings, including selecting a provider, specifying a model, and entering an API key.
 
 
 ### `class DiffApproval(Vertical)`
@@ -78,7 +78,7 @@ This file, `tui/app.py`, is part of an application that provides a text user int
 - **Methods:** `__init__`, `compose`, `on_mount`, `on_button_pressed`
 - **Inherits:** `Vertical`
 
-**Summary:** DiffApproval is a class that extends Vertical, initializes with a filename, search string, and replace string, and composes a UI with a title, scrollable area for displaying differences, and buttons for approving or rejecting changes.
+**Summary:** DiffApproval is a class that extends Vertical and is used to display a diff with a filename, search term, and replace term, and provides buttons for approving or rejecting the diff.
 
 
 ### `class OperonUI(App)`

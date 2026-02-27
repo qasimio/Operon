@@ -3,7 +3,7 @@
 
 ## Overview
 
-This file, `tools/build_brain.py`, imports functions from `tools.repo_brain` and `agent.llm`. It then calls `build_repo_brain` with a specified directory path and the `call_llm` function as arguments.
+This script calls the `build_repo_brain` function from `tools/repo_brain.py` with the specified directory path and an LLM function from `agent.llm`.
 
 
 ## Stats

@@ -3,7 +3,7 @@
 
 ## Overview
 
-This file is the initialization file for the Operon v5 Command Line Interface (CLI) package. It serves as the entry point for the CLI, allowing users to interact with the Operon system through command-line commands.
+This file is the initialization file for the Operon v5 Command Line Interface (CLI) package.
 
 
 ## Stats

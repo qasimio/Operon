@@ -3,7 +3,7 @@
 
 ## Overview
 
-This file contains a Python script for parsing and applying search-and-replace patches to text. It defines functions to parse search and replace blocks from a given text, find matching blocks in an original text, reindent the replacement block, and apply the patch, returning the patched text or a reason for no change.
+This file contains a Python script for parsing and applying search-and-replace operations on text. It defines functions to parse search and replace blocks from a given text, find matching blocks in an original text, reindent the replacement block, and apply the patch. The script also handles cases where no match is found or the search block is empty.
 
 
 ## Stats

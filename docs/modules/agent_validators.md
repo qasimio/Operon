@@ -12,7 +12,7 @@ Rule 6: Generic: any non-trivial diff → True.
 
 ## Overview
 
-This file contains a module for validating code changes based on specific rules. It uses the `difflib` library to compare the before and after text of a file and applies various rules to determine if the changes meet the specified goals. The rules include checking for no-op changes, deleting lines, adding imports, updating variable values, adding comments, and handling generic non-trivial diffs.
+This file contains a module for validating steps in a code editing process. It defines functions to check if a given step (represented by `before_text` and `after_text`) meets specific criteria defined in the `goal` attribute of the `state` object. The validation rules include checking for no-op operations, deleting lines, adding imports, updating variable values, adding comments, and handling any non-trivial diffs.
 
 
 ## Stats

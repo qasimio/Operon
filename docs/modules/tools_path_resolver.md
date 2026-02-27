@@ -13,7 +13,7 @@ but extended):
 
 ## Overview
 
-This file, `tools/path_resolver.py`, is part of the Operon v3.1 software and is designed to resolve user-supplied filenames to actual repository paths. It implements a 5-tier search logic to handle various cases, including exact relative paths, case-insensitive matches, recursive filename matches, fuzzy basename stem matches, and symbol index lookups if a state is provided. The function `resolve_path` returns the resolved relative path and a boolean indicating whether the file was found.
+This file, `tools/path_resolver.py`, is part of Operon v3.1 and is designed to resolve user-supplied filenames to actual repository paths. It implements a 5-tier search logic to handle various cases, including exact relative paths, case-insensitive matches, recursive filename matches, fuzzy basename stem matches, and symbol index lookups if a state is provided. The function `resolve_path` returns the resolved relative path and a boolean indicating whether the file was found.
 
 
 ## Stats

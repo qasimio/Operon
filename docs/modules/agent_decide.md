@@ -9,7 +9,7 @@ CODER gets full file preview for verbatim SEARCH block copying.
 
 ## Overview
 
-The `decide.py` file in the `agent` directory is part of the Operon v4 system, which is designed to determine the next action for an AI agent based on the state of the repository and the files that have been modified. The file includes functions to read files from disk, review changes using a deterministic approach, and decide whether to reject a change or ask a language model (LLM) for further evaluation. The `_reviewer_deterministic` function checks if any files have been modified and compares their current content with a previous snapshot to determine if the change is significant. If the change is significant, it asks the LLM for approval; otherwise, it rejects the change.
+The `decide.py` file in the `agent` directory is part of the Operon v4 system, which is designed to manage file modifications and decisions based on those modifications. The file includes functions to read files from disk, review changes using a deterministic approach, and decide whether to call a language model (LLM) for further processing based on the changes detected. The primary function, `_reviewer_deterministic`, checks if any files have been modified and compares their current content with a previous snapshot to determine if the changes are significant enough to require further action by the LLM.
 
 
 ## Stats

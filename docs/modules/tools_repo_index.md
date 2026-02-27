@@ -13,7 +13,7 @@ build_full_index() now calls b
 
 ## Overview
 
-The file `tools/repo_index.py` is part of the Operon v5 system, which is designed to create a comprehensive index of a repository. It includes functions to list repository files, compute file hashes, and build a symbol index using an AST-based parser. The file also mentions the integration of a full cross-reference graph for enhanced intelligence.
+The file `tools/repo_index.py` is part of the Operon v5 system, which is designed to create a comprehensive index of a repository. It includes functions to list repository files, compute file hashes, and build a symbol index using an AST-based parser. The symbol index is stored in a JSON file and is used for semantic search and other operations.
 
 
 ## Stats

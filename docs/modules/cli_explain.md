@@ -13,7 +13,7 @@ Commands:
 
 ## Overview
 
-This file, `cli/explain.py`, is part of the Operon v5 software and provides a command-line interface for various operations related to code analysis and manipulation. It includes commands to explain symbols, lines of code, execution flows, and entire files, as well as to show usages, rename symbols, generate documentation, summarize symbols in a file, and migrate function signatures. The file also includes helper functions to find the repository root, get an LLM (Large Language Model) if configured, and load or build a symbol graph.
+This file, `cli/explain.py`, is part of the Operon v5 software and provides a command-line interface for various operations related to code analysis and manipulation. It includes commands to explain symbols, code lines, execution flows, and entire files, as well as to show usages, rename symbols, generate documentation, summarize symbols in a file, and migrate function signatures. The file also includes helper functions to find the repository root, get an LLM (Large Language Model) function, and load or build a symbol graph.
 
 
 ## Stats

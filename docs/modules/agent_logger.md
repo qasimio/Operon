@@ -3,7 +3,7 @@
 
 ## Overview
 
-This file sets up a logging system for the Operon application. It defines a `TUILogHandler` that sends log messages to a user interface callback function if available, or falls back to standard error if the UI is not running. The `setup_logger` function configures a logger that writes to both a file and the UI, with different formats for each output.
+This file sets up a logging system for the Operon application. It defines a `TUILogHandler` that sends log messages to a user interface callback if available, or falls back to standard error if the UI is not running. The `setup_logger` function configures a logger that writes to both a file and the user interface, with different formats for each output.
 
 
 ## Stats
@@ -47,7 +47,7 @@ This file sets up a logging system for the Operon application. It defines a `TUI
 - **Methods:** `emit`
 - **Inherits:** `logging.Handler`
 
-**Summary:** TUILogHandler is a logging handler that formats log records and passes them to a UI callback for display.
+**Summary:** TUILogHandler is a logging handler that formats log records and passes them to a safe UI callback function.
 
 
 ## Functions

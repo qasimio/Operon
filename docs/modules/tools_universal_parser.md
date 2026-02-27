@@ -17,7 +17,7 @@ extract_symbols() returns:
 
 ## Overview
 
-This file, `tools/universal_parser.py`, provides a universal parser for extracting symbols and performing syntax checking across multiple programming languages, including Python, JavaScript/TypeScript, Java, and others. It uses the Python `ast` module for Python code and falls back to regex for other languages. The parser extracts information such as functions, classes, variables, imports, and more, and can optionally include comments in the output.
+This file, `tools/universal_parser.py`, is part of the Operon v5 software and is designed to extract symbols and perform syntax checking on various programming languages. It supports Python, JavaScript/TypeScript, Java, and other languages using different methods: Python uses the AST library for zero dependencies, while other languages fall back to regex for heuristic accuracy. The `extract_symbols` function returns a dictionary containing information about functions, classes, variables, imports, assignments, decorators, annotations, and comments. The `check_syntax` function verifies if the provided code is syntactically valid for the given language.
 
 
 ## Stats

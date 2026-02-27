@@ -3,7 +3,7 @@
 
 ## Overview
 
-This file defines a data class `AgentState` for managing the state of an agent in a software development process. It includes fields for tracking the agent's goal, current phase, plan, file operations, history, counters, memory, and a 4-level intelligence index.
+This file defines a dataclass `AgentState` for managing the state of an agent in a software development process. It includes fields for the agent's goal, repository root, phase in the development cycle, plan and validators, file tracking, history of actions, counters for various metrics, and memory buffers for context and Git state.
 
 
 ## Stats
@@ -39,4 +39,4 @@ This file defines a data class `AgentState` for managing the state of an agent i
 
 - **Lines:** 7–68
 
-**Summary:** The `AgentState` class in Python is a data class that encapsulates the state of an agent, including its goal, repository root, current phase in a phase machine, a plan with validators, the current step in the plan, and tracking of files read.
+**Summary:** The `AgentState` class encapsulates the current state of an agent, including its goal, repository root, phase in a state machine, plan, file tracking, and other relevant metadata.

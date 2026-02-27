@@ -11,7 +11,7 @@ KEY FIX vs v3.1:
 
 ## Overview
 
-This file, `agent/llm.py`, is part of the Operon v3.2 software, which serves as a universal language model (LLM) router. It supports various LLM providers including local, OpenAI, Anthropic, OpenRouter, Deepseek, Groq, Together, and Azure. The file includes configuration settings for these providers and handles model switching dynamically, allowing for hot-reloading without needing a restart. The configuration is managed through a JSON file located at `.operon/llm_config.json`.
+This file, `agent/llm.py`, is part of the Operon v3.2 software and serves as a universal language model (LLM) router. It supports various LLM providers including local, OpenAI, Anthropic, OpenRouter, Deepseek, Groq, Together, and Azure. The file includes configuration settings for these providers and manages model switching dynamically, allowing for hot-reloading without needing a restart.
 
 
 ## Stats

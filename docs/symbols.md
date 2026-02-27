@@ -201,7 +201,7 @@
 | `load_context_for_query` | 1 | 2 | 2 |
 | `load_symbol_graph` | 1 | 4 | 2 |
 | `loads` | 0 | 14 | 6 |
-| `log` | 0 | 98 | 15 |
+| `log` | 0 | 88 | 14 |
 | `logger` | 0 | 17 | 3 |
 | `loop_counter` | 0 | 7 | 2 |
 | `lower` | 0 | 76 | 10 |

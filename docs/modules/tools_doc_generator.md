@@ -15,7 +15,7 @@ Usage:
 
 ## Overview
 
-This file, `tools/doc_generator.py`, is part of the Operon v5 software and serves as a DeepWiki-style documentation generator. It generates various documentation files such as `README.md`, per-module documentation in `docs/modules/<file>.md`, a cross-repo symbol reference in `docs/symbols.md`, and a call graph in `docs/call_graph.md`. The `generate_repo_docs` function is the primary entry point, which takes the repository root, a graph, and an optional call LLM function as arguments.
+This file, `tools/doc_generator.py`, is part of the Operon v5 project and serves as a DeepWiki-style documentation generator. It generates various documentation files such as `README.md`, per-module documentation, a cross-repo symbol reference, and a call graph. The `generate_repo_docs` function is the primary entry point, which takes the repository root, a graph, and an optional call LLM function as parameters. The file includes helper functions for reading files, writing documentation, and formatting module and function signatures.
 
 
 ## Stats

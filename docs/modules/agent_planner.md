@@ -10,7 +10,7 @@ KEY FIXES:
 
 ## Overview
 
-The `agent/planner.py` file is part of the Operon v3.2 system, specifically the ARCHITECT planner. It generates tight, executable coding plans for achieving a given goal. The planner ensures that each step is a single atomic write to a specific file, avoids using terms like "locate" or "find," and includes validators for each step to provide ground truth for reviewers. The output is strict JSON, detailing the steps, validators, and any multi-file actions required.
+The `agent/planner.py` file is part of the Operon v3.2 system, specifically the ARCHITECT planner. It generates tight, executable coding plans for a given goal, ensuring that each step is a single atomic write to a specific file, and avoids using terms like "locate" or "find." The planner outputs the plan in strict JSON format, including steps, validators, and multi-file actions.
 
 
 ## Stats

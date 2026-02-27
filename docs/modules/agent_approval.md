@@ -11,7 +11,7 @@ Guarantees:
 
 ## Overview
 
-This file, `agent/approval.py`, serves as an approval gate for filesystem mutations in the Operon v3.2 software. It ensures that any write operation is approved by the user before proceeding, validates that the operation contains meaningful content, and logs the decision for auditing purposes. The file also handles both headless and TUI (Text User Interface) modes, providing appropriate feedback and blocking until the user approves or rejects the operation.
+This file, `agent/approval.py`, serves as an approval gate for filesystem mutations in the Operon v3.2 software. It ensures that any write operation is approved by the user before proceeding, validates that the operation contains meaningful content, and logs the decision. The file includes a function `ask_user_approval` that handles the approval process, which can be in headless or TUI mode, and includes a timeout mechanism to prevent hanging.
 
 
 ## Stats

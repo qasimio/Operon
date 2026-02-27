@@ -3,7 +3,7 @@
 
 ## Overview
 
-This file, `tools/semantic_memory.py`, is part of a system designed to create a semantic memory for a repository. It initializes an ONNX embedding model, defines a function to get the database path, and includes a function to index the repository by scanning files, hashing their contents, and updating a vector database. The system uses LanceDB for the database and FastEmbed for text embedding.
+This file, `tools/semantic_memory.py`, is part of a system designed to create a semantic memory database for a repository. It initializes an ONNX embedding model, defines functions to hash files, and scans the repository to index its contents, including Python, JavaScript, and other specified file types. The indexed data is stored in a LanceDB vector database, which can be used for semantic search and analysis.
 
 
 ## Stats

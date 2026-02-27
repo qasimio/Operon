@@ -12,7 +12,7 @@ ROOT CAUSE 1 — "rewrite called but file unchanged":
 
 ## Overview
 
-The `agent/loop.py` file is part of the Operon v4 system, which manages the production agent loop. It includes fixes for issues related to file changes, reviewer hallucinations, approval bypasses, and model switching crashes. The file imports various modules and functions to handle logging, calling the language model, deciding the next action, making plans, and validating steps.
+This file, `agent/loop.py`, is part of an AI system designed to manage and automate code changes. It includes functions to handle various aspects of code modification, such as detecting changes, validating steps, and deciding the next action based on the current state of the code. The file also addresses common issues like ensuring that the LLM (Language Model) produces accurate changes, verifying file changes, and handling user approvals.
 
 
 ## Stats
