@@ -32,7 +32,7 @@ _DEFAULT_CFG: dict = {
     "api_key":     "",
     "base_url":    "http://127.0.0.1:8080/v1",
     "max_tokens":  4096,
-    "temperature": 0.15,
+    "temperature": 0.20,
     "top_p":       0.9,
     "timeout":     180,
     "retries":     2,
