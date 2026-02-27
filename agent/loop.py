@@ -54,7 +54,7 @@ from tools.path_resolver import resolve_path, read_resolved
 from tools.repo_search import search_repo
 from tools.universal_parser import check_syntax
 
-MAX_STEPS        = 50
+MAX_STEPS        = 35
 NOOP_STREAK_MAX  = 2
 REJECT_THRESHOLD = 3
 
