@@ -33,18 +33,6 @@ if __name__ == "__main__":
             sys.exit(0)
 
 # main.py — Operon v5
-"""
-Entry point.
-
-  python main.py              → launch TUI
-  python main.py explain <X>  → explain symbol X
-  python main.py rename <old> <new> [--apply]
-  python main.py usages <X>
-  python main.py docs [--no-llm]
-  python main.py summarize <file>
-  python main.py signature
-"""
-
 # Summary of main.py
 # This file serves as the entry point for the application. It provides various commands such as 'explain', 'rename', 'usages', 'docs', 'summarize', and 'signature'. Each command is handled by a specific function defined in the file.
 
