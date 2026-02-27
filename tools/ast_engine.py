@@ -591,7 +591,8 @@ def insert_summary_comment(
         return content
 
     # Match indentation of the target line
-    indent = re.match(r"^(\s*)", lines[idx]).group(1)
+    match = re.match(r"^(\s*)", lines[idx])
+    indent = match.group(1) if match else ""
     comment_line = f"{indent}# {summary}\n"
     lines.insert(idx, comment_line)
     return "".join(lines)
