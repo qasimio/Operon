@@ -3,7 +3,6 @@ from pathlib import Path
 import json
 import datetime
 
-
 def dump_diff_report_from_json(json_path, out_path=None):
     j = Path(json_path)
     if not j.exists():
