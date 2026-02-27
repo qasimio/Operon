@@ -51,7 +51,7 @@ __pycache__/
 # Env-specific config
 .env
 .env.*
-.operon
+.operon/
 
 # Ignored lock files (optional, your preference)
 poetry.lock
